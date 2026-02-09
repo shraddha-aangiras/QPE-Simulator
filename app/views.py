@@ -8,8 +8,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush, QPainterPath
 
-from style import UI_CONFIG
-from calc import get_qpe_data
+from app.style import UI_CONFIG
+from app.calc import get_qpe_data
 
 class MultiQubitPainter(QWidget):
     """Bottom Tab: Custom painted visualization of 1-10 qubits."""

@@ -1,7 +1,7 @@
 import numpy as np
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QSpinBox, QPushButton
-from components import SliderWithEdit
-from style import UI_CONFIG
+from app.components import SliderWithEdit
+from app.style import UI_CONFIG
 
 class QPEControlPanel(QFrame):
     def __init__(self, parent=None):

@@ -3,10 +3,10 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QTa
 from PyQt5 import QtCore
 
 # Import from our new modules
-from style import get_dark_palette
-from calc import get_qpe_data
-from controls import QPEControlPanel
-from views import CountsViewTab, MultiQubitPainter
+from app.style import get_dark_palette
+from app.calc import get_qpe_data
+from app.controls import QPEControlPanel
+from app.views import CountsViewTab, MultiQubitPainter
 
 class QPE_LabInterface(QMainWindow):
     def __init__(self):
