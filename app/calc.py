@@ -1,44 +1,91 @@
 import numpy as np
+from app.style import USE_RADIANS
 
 def qpe_p(n, x, phase):
     """Calculates ideal probability of measuring state |x> given n qubits and phase."""
+    # (No changes to this function)
     if abs(phase - x/(2**n)) < 1e-9: return 1.0
     num = np.sin(np.pi * (2**n * phase - x)) ** 2
     denom = np.sin(np.pi * (phase - x/(2**n))) ** 2
     if abs(denom) < 1e-15: return 1.0
     return 1/(2**(n*2)) * num / denom
 
+def get_circular_stats(counts, n_qubits):
+    """
+    Calculates both the Circular Mean (Estimate) and Circular Std Dev (Spread).
+    """
+    total = np.sum(counts)
+    if total == 0: 
+        return 0.0, 1.0
+
+    N = 2**n_qubits
+
+    # Map discrete states 0..N-1 to angles 0..2pi
+    angles = np.linspace(0, 2*np.pi, N, endpoint=False)
+    
+    # Calculate Mean Resultant Vector (R)
+    sin_sum = np.sum(counts * np.sin(angles))
+    cos_sum = np.sum(counts * np.cos(angles))
+    
+    # R_len is the length of the average vector
+    # 1.0 = All points are identical
+    # 0.0 = Points are uniformly distributed around circle
+    R_len = np.sqrt(sin_sum**2 + cos_sum**2) / total
+
+    mean_angle = np.arctan2(sin_sum, cos_sum)
+    
+    if mean_angle < 0:
+        mean_angle += 2 * np.pi
+    mean_est = mean_angle / (2 * np.pi)
+    
+    # Circular Std Dev
+    R_len = np.clip(R_len, 1e-9, 1.0)
+    std_dev_rad = np.sqrt(-2 * np.log(R_len))
+    std_dev_fraction = std_dev_rad / (2*np.pi)
+    
+    return mean_est, std_dev_fraction
+
 def get_qpe_data(n_qubits, phase_val, shots, mean_photons=1, use_poisson=False):
     """
     Simulates a quantum optical experiment.
     """
+    if USE_RADIANS:
+        norm_phase = phase_val / (2 * np.pi)
+    else:
+        norm_phase = phase_val
+
     N = 2**n_qubits
     prob_arr = np.zeros(N)
     
     # Ideal Probabilities
     for x in range(N):
-        prob_arr[x] = qpe_p(n_qubits, x, phase_val)
+        prob_arr[x] = qpe_p(n_qubits, x, norm_phase)
     
-    # Normalize 
     if np.sum(prob_arr) > 0: prob_arr /= np.sum(prob_arr)
 
     total_expected = int(shots * mean_photons)
     
     if use_poisson:
-        # Counts fluctuate (Poissonian shot noise)
         counts = np.random.poisson(prob_arr * total_expected)
     else:
-        # Exact sum
         counts = np.random.multinomial(total_expected, prob_arr)
     
-    if np.sum(counts) > 0:
-        max_idx = np.argmax(counts)
+    mean_est, std_dev = get_circular_stats(counts, n_qubits)
+
+    if np.sum(counts) == 0:
+        mean_est = 0
+
+    total_shots = np.sum(counts)
+    if total_shots > 0:
+        std_error = std_dev / np.sqrt(total_shots)
     else:
-        max_idx = 0
-        
+        std_error = 1.0
+    
     return {
         "x": np.arange(N),
         "counts": counts,
-        "phase_est": max_idx / N,
+        "phase_est": mean_est, 
+        "std_dev_fraction": std_dev,
+        "std_error": std_error,
         "N": N
     }

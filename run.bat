@@ -11,6 +11,13 @@ if not exist ".venv\Scripts\activate.bat" (
 
 call .venv\Scripts\activate
 
+if %errorlevel% NEQ 0 (
+    echo.
+    echo [ERROR] The application encountered an error or crashed.
+    pause
+    exit /b
+)
+
 echo Starting QPE Simulation...
 python main.py
 

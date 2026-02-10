@@ -27,7 +27,7 @@ class QPEControlPanel(QFrame):
         # Shots
         layout.addWidget(QLabel("Shots:"))
         self.num_shots = QSpinBox()
-        self.num_shots.setRange(1, 100000)
+        self.num_shots.setRange(1, 100000000)
         self.num_shots.setValue(100)
         self.num_shots.setSingleStep(100)
         layout.addWidget(self.num_shots)

@@ -1,6 +1,8 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QColor
 
+USE_RADIANS = False
+
 UI_CONFIG = dict(
     COLORS=["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"],
     PLOT_BACKGROUND="#2b2b2b", 

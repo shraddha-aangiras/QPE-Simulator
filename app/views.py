@@ -48,10 +48,16 @@ class MultiQubitPainter(QWidget):
         
         col_text = Qt.white
         col_line = QColor("#888")
-        col_box = QColor(UI_CONFIG["COLORS"][1]) 
-        col_box.setAlpha(80)
-        col_box_border = QColor(UI_CONFIG["COLORS"][1])
-        col_star = QColor(UI_CONFIG["COLORS"][3]) 
+        
+        col_hardware = QColor("#777") 
+        col_hardware.setAlpha(40)
+        
+        col_confidence = QColor(UI_CONFIG["COLORS"][1]) 
+        col_confidence.setAlpha(150)
+        col_conf_border = QColor(UI_CONFIG["COLORS"][1])
+        
+        col_true = QColor("#3498db")
+        col_est = QColor(UI_CONFIG["COLORS"][3])
         
         painter.setFont(QFont("Arial", 11))
 
@@ -71,23 +77,46 @@ class MultiQubitPainter(QWidget):
             data = self.results[n]
             est = data['phase_est']
             
-            # Circular difference
+            est_px = int(margin_left + est * line_w)
+            true_px = int(margin_left + self.phase_true * line_w)
+            
             diff = abs(est - self.phase_true)
             err = min(diff, 1.0 - diff)
             
-            uncertainty = 1.0 / (2**n)
-            est_px = int(margin_left + est * line_w)
-            box_w_px = int(uncertainty * line_w)
+            limit_width = 1.0 / (2**n)
+            limit_px = int(limit_width * line_w)
             
-            painter.setBrush(QBrush(col_box))
-            painter.setPen(QPen(col_box_border, 1))
-            box_x = est_px - box_w_px // 2
+            std_err = data.get('std_error', 1.0)
+            conf_px = int((std_err * 4.0) * line_w)
+            conf_px = max(conf_px, 2)
             
-            if box_x < line_start: box_x = line_start
-            if box_x + box_w_px > line_end: box_w_px = line_end - box_x
+            painter.setBrush(QBrush(col_hardware))
+            painter.setPen(Qt.NoPen)
             
-            painter.drawRect(box_x, cy - 8, box_w_px, 16)
-            self.draw_star(painter, est_px, cy, size=8, color=col_star)
+            l_box_x = est_px - limit_px // 2
+            if l_box_x < line_start: l_box_x = line_start
+            draw_lw = limit_px
+            if l_box_x + draw_lw > line_end: draw_lw = line_end - l_box_x
+            
+            painter.drawRect(l_box_x, cy - 12, draw_lw, 24)
+            
+            painter.setBrush(QBrush(col_confidence))
+            painter.setPen(QPen(col_conf_border, 1))
+            
+            c_box_x = est_px - conf_px // 2
+            if c_box_x < line_start: c_box_x = line_start
+            draw_cw = conf_px
+            if c_box_x + draw_cw > line_end: draw_cw = line_end - c_box_x
+            
+            painter.drawRect(c_box_x, cy - 6, draw_cw, 12)
+
+            painter.setPen(QPen(col_true, 3))
+            painter.drawLine(true_px, cy - 15, true_px, cy + 15)
+            
+            square_size = 14
+            painter.setBrush(QBrush(col_est))
+            painter.setPen(QPen(Qt.black, 1)) 
+            painter.drawRect(est_px - square_size // 2, cy - square_size // 2, square_size, square_size)
             
             painter.setPen(col_text)
             painter.setFont(QFont("Courier New", 10)) 
@@ -105,6 +134,8 @@ class MultiQubitPainter(QWidget):
         painter.setBrush(QBrush(color))
         painter.setPen(Qt.NoPen)
         painter.drawPath(path)
+
+    
 
 
 class CountsViewTab(QWidget):
@@ -153,11 +184,17 @@ class CountsViewTab(QWidget):
         self.lbl_est.setFont(font_res)
         self.lbl_est.setStyleSheet(f"color: {UI_CONFIG['COLORS'][1]};")
         
+        self.lbl_spread = QLabel("Spread: 0.00")
+        self.lbl_spread.setFont(font_res)
+        self.lbl_spread.setStyleSheet(f"color: {UI_CONFIG['COLORS'][2]};")
+
         self.lbl_err = QLabel("Err: 0.0000")
         self.lbl_err.setFont(font_res)
         self.lbl_err.setStyleSheet(f"color: {UI_CONFIG['COLORS'][3]};") 
 
         bar_layout.addWidget(self.lbl_est)
+        bar_layout.addStretch()
+        bar_layout.addWidget(self.lbl_spread)
         bar_layout.addStretch()
         bar_layout.addWidget(self.lbl_err)
         
@@ -214,3 +251,8 @@ class CountsViewTab(QWidget):
         
         self.lbl_est.setText(f"Est Phase: {est:.5f}")
         self.lbl_err.setText(f"Error: {err:.5f}")
+
+        prec_val = data.get('std_error', 0.0)
+        self.lbl_spread.setText(f"Standard Error: ±{prec_val:.5f}") 
+        self.lbl_spread.setToolTip("Standard Error of the Mean (Shrinks with more shots)")
+
