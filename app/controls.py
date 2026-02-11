@@ -21,7 +21,7 @@ class QPEControlPanel(QFrame):
         # Phase Control
         layout.addWidget(QLabel("Target Phase (φ): [0, 1]"))
         self.phase_input = SliderWithEdit(self, min=0.0, max=1.0, step=0.001)
-        self.phase_input.setValue(0.125)
+        self.phase_input.setValue(0.3)
         layout.addWidget(self.phase_input)
         
         # Shots
