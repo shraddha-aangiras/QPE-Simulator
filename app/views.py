@@ -248,7 +248,7 @@ class CountsViewTab(QWidget):
             # First and last non zero states
             first_state = np.min(nonzero_indices)
             last_state  = np.max(nonzero_indices)
-            buffer = 2
+            buffer = 3
             
             min_x = max(0, first_state - buffer)
             max_x = min(N - 1, last_state + buffer)
