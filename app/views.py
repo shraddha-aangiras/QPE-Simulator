@@ -243,6 +243,31 @@ class CountsViewTab(QWidget):
             
         self.bar_item.setOpts(x=data['x'], height=counts, width=0.6)
         
+        # -- I'm trying to see how to change ticks without screwing over scaling
+        if np.sum(counts) > 0:
+            peak_idx = np.argmax(counts)
+            radius = 8
+            min_x = max(0, peak_idx - radius)
+            max_x = min(N - 1, peak_idx + radius)
+            
+            self.graph_widget.setXRange(min_x, max_x, padding=0.05)
+            ax = self.graph_widget.getAxis('bottom')
+        
+            ticks = []
+
+            for x in range(int(min_x), int(max_x) + 1):
+                if 0 <= x < len(counts) and counts[x] > 0:
+                    # Phase label
+                    phase_val = x / (2**n_qubits)
+                    label = f"{phase_val:.4f}" 
+                    ticks.append((x, label))
+            
+            ax.setTicks([ticks])
+            #ax.setTicks([data['phase_est']])
+            
+        else:
+            self.graph_widget.setXRange(0, N)
+        # -----------
         est = data['phase_est']
         
         # Circular difference
