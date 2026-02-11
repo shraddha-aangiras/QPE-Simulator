@@ -1,10 +1,12 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QTabWidget, QScrollArea
 from PyQt5 import QtCore
+from PyQt5.QtCore import QTimer
+import numpy as np
 
 # Import from our new modules
 from app.style import get_dark_palette
-from app.calc import get_qpe_data
+from app.calc import get_qpe_data, get_ideal_probs, get_circular_stats
 from app.controls import QPEControlPanel
 from app.views import CountsViewTab, MultiQubitPainter
 
@@ -50,27 +52,147 @@ class QPE_LabInterface(QMainWindow):
         main_layout.addWidget(self.tabs)
         
         # Connections
-        self.controls.phase_input.valueChanged.connect(self.update_all)
-        self.controls.num_shots.valueChanged.connect(self.update_all)
-        self.controls.num_qubits.valueChanged.connect(self.update_all)
-        self.controls.num_photons.valueChanged.connect(self.update_all)
-        self.controls.refresh_btn.clicked.connect(self.update_all)
+        # self.controls.phase_input.valueChanged.connect(self.update_all)
+        # self.controls.num_shots.valueChanged.connect(self.update_all)
+        # self.controls.num_qubits.valueChanged.connect(self.update_all)
+        # self.controls.num_photons.valueChanged.connect(self.update_all)
+        # self.controls.refresh_btn.clicked.connect(self.update_all)
         
-        # Trigger initial update
-        self.update_all()
+        # # Trigger initial update
+        # self.update_all()
 
-    def update_all(self):
-        phase = self.controls.phase_input.value()
-        raw_shots = self.controls.num_shots.value()
-        photons = self.controls.num_photons.value()
-        n = self.controls.num_qubits.value()
+        self.controls.phase_input.valueChanged.connect(self.trigger_animation)
+        self.controls.num_shots.valueChanged.connect(self.trigger_animation)
+        self.controls.num_qubits.valueChanged.connect(self.trigger_animation)
+        self.controls.num_photons.valueChanged.connect(self.trigger_animation)
+        self.controls.refresh_btn.clicked.connect(self.trigger_animation)
         
-        # Update tab 1
-        data = get_qpe_data(n, phase, raw_shots, photons, self.use_poisson_noise)
-        self.tab_counts.update_data(data, phase, n)
+        # Animation State
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.animation_step)
+        self.anim_duration = 10  # seconds
+        self.frame_rate = 30      # FPS
+        self.timer_interval = int(1000 / self.frame_rate)
         
-        # Update tab 2
-        self.tab_scaling.set_parameters(phase, raw_shots, photons, self.use_poisson_noise)
+        # Start initial
+        self.trigger_animation()
+
+    def trigger_animation(self):
+        """Prepares state and starts the timer."""
+        self.timer.stop()
+        
+        # Targets
+        self.tgt_phase = self.controls.phase_input.value()
+        self.tgt_shots = self.controls.num_shots.value()
+        self.tgt_photons = self.controls.num_photons.value()
+        self.tgt_n = self.controls.num_qubits.value()
+        
+        self.total_expected_events = int(self.tgt_shots * self.tgt_photons)
+        
+        # Pre-calculate Probabilities (Optimization)
+        self.main_probs = get_ideal_probs(self.tgt_n, self.tgt_phase)
+        self.main_counts_accum = np.zeros(len(self.main_probs), dtype=int)
+
+        # graph axis locking
+        max_prob = np.max(self.main_probs)
+        expected_peak = max_prob * self.total_expected_events
+        y_limit = expected_peak + 4 * np.sqrt(expected_peak)
+        y_limit = max(y_limit, 10)
+        
+        self.tab_counts.set_y_range(y_limit)
+        
+        # For the multi-qubit view (1-10 qubits)
+        self.scaling_probs = {}
+        self.scaling_counts = {}
+        for n in range(1, 11):
+            probs = get_ideal_probs(n, self.tgt_phase)
+            self.scaling_probs[n] = probs
+            self.scaling_counts[n] = np.zeros(len(probs), dtype=int)
+
+        # 3. Reset Counters
+        self.current_events = 0
+        self.start_time = QtCore.QTime.currentTime()
+        
+        self.timer.start(self.timer_interval)
+
+    def animation_step(self):
+        # Calculate how many events we should have processed by now
+        elapsed = self.start_time.msecsTo(QtCore.QTime.currentTime()) / 1000.0
+        
+        if elapsed >= self.anim_duration:
+            target_now = self.total_expected_events
+            is_finished = True
+        else:
+            # Linear interpolation of progress
+            progress = elapsed / self.anim_duration
+            target_now = int(progress * self.total_expected_events)
+            is_finished = False
+
+        batch_size = target_now - self.current_events
+        
+        if batch_size > 0:
+            self.current_events += batch_size
+            
+            # --- Update Tab 1 (Main Counts) ---
+            # Generate random batch based on pre-calculated probs
+            new_counts = np.random.multinomial(batch_size, self.main_probs)
+            self.main_counts_accum += new_counts
+            
+            # Calculate stats on the running total
+            mean_est, std_dev = get_circular_stats(self.main_counts_accum, self.tgt_n)
+            
+            # Calc Standard Error (scales with sqrt(N))
+            total_seen = np.sum(self.main_counts_accum)
+            std_error = std_dev / np.sqrt(total_seen) if total_seen > 0 else 1.0
+
+            # Construct data dict for View
+            data_packet = {
+                "x": np.arange(len(self.main_probs)),
+                "counts": self.main_counts_accum,
+                "phase_est": mean_est,
+                "std_dev_fraction": std_dev,
+                "std_error": std_error,
+                "N": len(self.main_probs)
+            }
+            self.tab_counts.update_data(data_packet, self.tgt_phase, self.tgt_n)
+
+            # --- Update Tab 2 (Scaling View) ---
+            # We update the background data for all 10 lines
+            for n in range(1, 11):
+                # Generate specific batch for this qubit count
+                # (We use the same batch_size for consistency across rows)
+                s_counts = np.random.multinomial(batch_size, self.scaling_probs[n])
+                self.scaling_counts[n] += s_counts
+                
+                s_mean, s_std = get_circular_stats(self.scaling_counts[n], n)
+                s_total = np.sum(self.scaling_counts[n])
+                s_err = s_std / np.sqrt(s_total) if s_total > 0 else 1.0
+                
+                # Update the painter's internal results dict directly
+                self.tab_scaling.results[n] = {
+                    "phase_est": s_mean,
+                    "std_error": s_err,
+                    # We don't need full counts array for the scaling view, just stats
+                }
+            
+            # Trigger repaint
+            self.tab_scaling.set_parameters(self.tgt_phase, self.tgt_shots, self.tgt_photons, self.use_poisson_noise)
+            
+        if is_finished:
+            self.timer.stop()
+
+    # def update_all(self):
+    #     phase = self.controls.phase_input.value()
+    #     raw_shots = self.controls.num_shots.value()
+    #     photons = self.controls.num_photons.value()
+    #     n = self.controls.num_qubits.value()
+        
+    #     # Update tab 1
+    #     data = get_qpe_data(n, phase, raw_shots, photons, self.use_poisson_noise)
+    #     self.tab_counts.update_data(data, phase, n)
+        
+    #     # Update tab 2
+    #     self.tab_scaling.set_parameters(phase, raw_shots, photons, self.use_poisson_noise)
 
 
 if __name__ == "__main__":

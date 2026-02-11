@@ -255,4 +255,9 @@ class CountsViewTab(QWidget):
         prec_val = data.get('std_error', 0.0)
         self.lbl_spread.setText(f"Standard Error: ±{prec_val:.5f}") 
         self.lbl_spread.setToolTip("Standard Error of the Mean (Shrinks with more shots)")
+    
+    def set_y_range(self, max_val):
+        """Fixes the Y-axis range to prevent jumping during animation."""
+        self.graph_widget.setYRange(0, max_val, padding=0.1)
+        self.graph_widget.enableAutoRange(axis='y', enable=False)
 

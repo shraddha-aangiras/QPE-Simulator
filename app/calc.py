@@ -89,3 +89,21 @@ def get_qpe_data(n_qubits, phase_val, shots, mean_photons=1, use_poisson=False):
         "std_error": std_error,
         "N": N
     }
+
+def get_ideal_probs(n_qubits, phase_val):
+    """Helper to pre-calculate probabilities for the animation loop."""
+    if USE_RADIANS:
+        norm_phase = phase_val / (2 * np.pi)
+    else:
+        norm_phase = phase_val
+
+    N = 2**n_qubits
+    prob_arr = np.zeros(N)
+    
+    for x in range(N):
+        prob_arr[x] = qpe_p(n_qubits, x, norm_phase)
+    
+    if np.sum(prob_arr) > 0: 
+        prob_arr /= np.sum(prob_arr)
+        
+    return prob_arr
