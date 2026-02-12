@@ -5,148 +5,232 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, 
     QFrame, QLabel
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush, QPainterPath
+from PyQt5.QtCore import Qt, QPointF
+from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush, QPainterPath, QPolygonF
 
 from app.style import UI_CONFIG
-from app.calc import get_qpe_data
 
 class MultiQubitPainter(QWidget):
     """Bottom Tab: Custom painted visualization of 1-10 qubits."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(700)
+        self.setMinimumHeight(850)
         self.phase_true = 0.0
-        self.shots = 100
-        self.mean_photons = 1.0 
-        self.use_poisson = True
-        self.qubit_range = range(1, 11)
         self.results = {}
-        self.update_simulation()
-
-    def set_parameters(self, phase, shots, photons, use_poisson):
-        self.phase_true = phase
-        self.shots = shots
-        self.mean_photons = photons
-        self.use_poisson = use_poisson
-        self.update_simulation()
-        self.update()
-
-    def update_simulation(self):
-        for n in self.qubit_range:
-            self.results[n] = get_qpe_data(n, self.phase_true, self.shots, self.mean_photons, self.use_poisson)
+        
+        # --- COLOR PALETTE ---
+        self.c_true_line = QColor("#3498db")    # Solid Blue Line
+        
+        # Grey Color for Limit
+        self.c_limit_border = QColor("#7f8c8d") 
+        
+        self.c_est = QColor("#f1c40f")          # Gold Star
+        
+        # Purple Uncertainty (Semi-transparent fill)
+        self.c_conf = QColor(UI_CONFIG["COLORS"][0]) 
+        self.c_conf.setAlpha(100) 
+        
+        self.c_text = Qt.white
+        self.c_grid = QColor("#444")
+        self.c_shots = QColor("#bdc3c7")
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
         w = self.width()
-        row_h = 60
-        margin_left = 90 
-        margin_right = 200
+        
+        # Layout Constants
+        margin_left = 120
+        margin_right = 220
+        top_offset = 80 
+        row_h = 70
         line_w = w - margin_left - margin_right
-        
-        col_text = Qt.white
-        col_line = QColor("#888")
-        
-        col_hardware = QColor("#777") 
-        col_hardware.setAlpha(40)
-        
-        col_confidence = QColor(UI_CONFIG["COLORS"][1]) 
-        col_confidence.setAlpha(150)
-        col_conf_border = QColor(UI_CONFIG["COLORS"][1])
-        
-        col_true = QColor("#3498db")
-        col_est = QColor(UI_CONFIG["COLORS"][3])
-        
-        painter.setFont(QFont("Arial", 11))
 
-        for i, n in enumerate(self.qubit_range):
-            cy = i * row_h + 35
+        # --- 1. Draw Legend ---
+        self.draw_legend(painter, w, top_offset)
+
+        # --- 2. Draw Column Headers ---
+        header_y = top_offset + 10
+        painter.setPen(QColor("#aaa"))
+        painter.setFont(QFont("Arial", 10, QFont.Bold))
+        painter.drawText(10, header_y, "Resource Setup")
+        painter.drawText(margin_left, header_y, "Experiment Result")
+        painter.drawText(w - margin_right + 20, header_y, "Metrics")
+        
+        painter.setPen(QPen(self.c_grid, 1))
+        painter.drawLine(0, header_y + 10, w, header_y + 10)
+
+        # --- 3. Draw Rows ---
+        for i, n in enumerate(range(1, 11)):
+            cy = top_offset + 30 + (i * row_h) + 35
             
+            # Retrieve Data
             data = self.results.get(n, {})
             est = data.get('phase_est', 0.0)
             shots_disp = data.get('shots_count', 0)
             std_err = data.get('std_error', 1.0)
             
-            painter.setPen(col_text)
-            painter.setFont(QFont("Arial", 11, QFont.Bold))
-            painter.drawText(10, cy - 2, f"{n} qubits")
+            # -- Row Background --
+            if i % 2 == 0:
+                painter.fillRect(0, cy - 35, w, row_h, QColor(255, 255, 255, 5))
+
+            # -- LEFT: Qubits & Shots --
+            painter.setPen(self.c_text)
+            painter.setFont(QFont("Arial", 12, QFont.Bold))
+            painter.drawText(15, cy - 5, f"{n} Qubits")
             
             painter.setFont(QFont("Arial", 9))
-            painter.setPen(QColor("#bbb"))
-            painter.drawText(10, cy + 14, f"({shots_disp} shots)")
-            painter.setFont(QFont("Arial", 11))
+            painter.setPen(self.c_shots)
+            painter.drawText(15, cy + 12, f"Cost: {shots_disp} shots")
 
+            # -- CENTER: Visualization --
             line_start = margin_left
             line_end = margin_left + line_w
-            painter.setPen(QPen(col_line, 2))
-            painter.drawLine(line_start, cy, line_end, cy)
-            painter.drawLine(line_start, cy-5, line_start, cy+5)
-            painter.drawLine(line_end, cy-5, line_end, cy+5)
             
+            # Base Axis
+            painter.setPen(QPen(QColor("#666"), 2))
+            painter.drawLine(line_start, cy, line_end, cy)
+            
+            # Calculate Positions
             est_px = int(margin_left + est * line_w)
             true_px = int(margin_left + self.phase_true * line_w)
             
-            diff = abs(est - self.phase_true)
-            err = min(diff, 1.0 - diff)
+            # --- TARGET LOGIC: NEAREST INTEGER ---
+            # 1. Determine "Best Possible Hardware State" (Rounding)
+            N_bins = 2**n
             
-            limit_width = 1.0 / (2**n)
-            limit_px = int(limit_width * line_w)
+            # Find the bin index closest to the true phase
+            # Example: 0.3 * 2 = 0.6 -> Rounds to 1. Target is Bin 1.
+            best_bin_index = int(round(self.phase_true * N_bins))
+            if best_bin_index >= N_bins: best_bin_index = 0 # Wrap around 1.0 -> 0.0
             
-            conf_px = int((std_err * 4.0) * line_w)
-            conf_px = max(conf_px, 2)
+            # 2. Draw the "Target Box" around that ideal state
+            # This shows the user: "This is the bin you SHOULD land in"
+            target_center_val = best_bin_index / N_bins
             
-            painter.setBrush(QBrush(col_hardware))
-            painter.setPen(Qt.NoPen)
+            # Box is 1/N wide, centered on the ideal state
+            bin_width_val = 1.0 / N_bins
             
-            l_box_x = est_px - limit_px // 2
-            if l_box_x < line_start: l_box_x = line_start
-            draw_lw = limit_px
-            if l_box_x + draw_lw > line_end: draw_lw = line_end - l_box_x
+            # Convert to pixels
+            box_center_px = int(margin_left + target_center_val * line_w)
+            box_width_px = max(int(bin_width_val * line_w), 4)
+            box_start_px = box_center_px - box_width_px // 2
             
-            painter.drawRect(l_box_x, cy - 12, draw_lw, 24)
+            # --- DRAWING ---
             
-            painter.setBrush(QBrush(col_confidence))
-            painter.setPen(QPen(col_conf_border, 1))
-            
+            # 1. Hardware Limit (Grey Dashed Box) - The Target Zone
+            painter.setPen(QPen(self.c_limit_border, 1, Qt.DashLine))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(box_start_px, cy - 15, box_width_px, 30)
+
+            # 2. Uncertainty Bar (Purple)
+            conf_width = std_err * 4.0
+            conf_px = int(conf_width * line_w)
             c_box_x = est_px - conf_px // 2
-            if c_box_x < line_start: c_box_x = line_start
-            draw_cw = conf_px
-            if c_box_x + draw_cw > line_end: draw_cw = line_end - c_box_x
             
-            painter.drawRect(c_box_x, cy - 6, draw_cw, 12)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(self.c_conf))
+            painter.drawRect(c_box_x, cy - 4, conf_px, 8)
 
-            painter.setPen(QPen(col_true, 3))
-            painter.drawLine(true_px, cy - 15, true_px, cy + 15)
-            
-            square_size = 14
-            painter.setBrush(QBrush(col_est))
-            painter.setPen(QPen(Qt.black, 1)) 
-            painter.drawRect(est_px - square_size // 2, cy - square_size // 2, square_size, square_size)
-            
-            painter.setPen(col_text)
-            painter.setFont(QFont("Courier New", 10)) 
-            painter.drawText(line_end + 15, cy + 5, f"Err: {err:.4f}")
-            painter.setFont(QFont("Arial", 11))
+            # 3. True Phase Line (Solid Blue)
+            painter.setPen(QPen(self.c_true_line, 2))
+            painter.drawLine(true_px, cy - 20, true_px, cy + 20)
 
-    def draw_star(self, painter, x, y, size, color):
-        path = QPainterPath()
-        import math
-        path.moveTo(x, y - size)
-        for i in range(5):
-            theta = math.radians(144 * i)
-            path.lineTo(x + size * math.sin(theta), y - size * math.cos(theta))
-        path.closeSubpath()
-        painter.setBrush(QBrush(color))
+            # 4. Estimate (Gold Star)
+            self.draw_star(painter, est_px, cy, 10, self.c_est)
+
+            # -- RIGHT: Metrics (Hit/Miss) --
+            
+            # HIT LOGIC: Distance Check
+            # If the error is less than half a bin width, we successfully resolved the state.
+            dist = abs(est - self.phase_true)
+            dist = min(dist, 1.0 - dist) # Circular distance
+            
+            threshold = (1.0 / N_bins) / 2.0
+            # Small epsilon for float comparison
+            is_resolved = dist < (threshold + 1e-9)
+            
+            metrics_x = w - margin_right + 20
+            
+            painter.setFont(QFont("Arial", 10, QFont.Bold))
+            if is_resolved:
+                painter.setPen(QColor("#2ecc71")) # Green
+                painter.drawText(metrics_x, cy - 10, "✔ Correct Bin")
+            else:
+                painter.setPen(QColor("#e67e22")) # Orange
+                painter.drawText(metrics_x, cy - 10, "⚠ Incorrect Bin")
+            
+            painter.setFont(QFont("Arial", 9))
+            
+            # 1. Estimate Value
+            painter.setPen(QColor("#f1c40f")) 
+            painter.drawText(metrics_x, cy + 2, f"Est:   {est:.5f}")
+            
+            # 2. Error Value
+            painter.setPen(QColor("#bbb"))
+            painter.drawText(metrics_x, cy + 14, f"Err:   {dist:.5f}")
+            
+            # 3. Bin Width
+            painter.setPen(QColor("#7f8c8d"))
+            painter.drawText(metrics_x, cy + 26, f"Bin Size: {bin_width_val:.5f}")
+
+    def draw_legend(self, painter, w, h_offset):
+        painter.setBrush(QColor(30, 30, 30))
         painter.setPen(Qt.NoPen)
-        painter.drawPath(path)
+        painter.drawRect(0, 0, w, h_offset)
+        
+        y = 20
+        spacing = 180
+        x = 20
+        font = QFont("Arial", 10)
+        painter.setFont(font)
+        
+        # 1. True Phase
+        painter.setPen(QPen(self.c_true_line, 2))
+        painter.drawLine(x, y+10, x, y-10)
+        painter.setPen(Qt.white)
+        painter.drawText(x + 10, y + 5, "True Phase")
+        
+        x += spacing
+        # 2. Limit Box
+        painter.setPen(QPen(self.c_limit_border, 1, Qt.DashLine))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(x, y - 10, 20, 20)
+        painter.setPen(Qt.white)
+        painter.drawText(x + 30, y + 5, "Hardware Resolution")
+        
+        x += spacing + 30
+        # 3. Estimate
+        self.draw_star(painter, x, y, 8, self.c_est)
+        painter.setPen(Qt.white)
+        painter.drawText(x + 15, y + 5, "Estimate")
+        
+        x += spacing
+        # 4. Uncertainty
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(self.c_conf))
+        painter.drawRect(x, y - 4, 20, 8)
+        painter.setPen(Qt.white)
+        painter.drawText(x + 30, y + 5, "Shot Noise")
 
-    
-
+    def draw_star(self, painter, cx, cy, radius, color):
+        painter.setBrush(QBrush(color))
+        painter.setPen(QPen(Qt.black, 1))
+        
+        points = []
+        import math
+        for i in range(5):
+            angle_deg = 270 + (i * 144)
+            angle_rad = math.radians(angle_deg)
+            px = cx + radius * math.cos(angle_rad)
+            py = cy + radius * math.sin(angle_rad)
+            points.append(QPointF(px, py))
+            
+        painter.drawPolygon(QPolygonF(points))
 
 class CountsViewTab(QWidget):
-    """Top Tab: Table and Bar Graph."""
+    """Top Tab: Table and Bar Graph. (Unchanged)"""
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -155,7 +239,6 @@ class CountsViewTab(QWidget):
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(1)
         
-        # Table
         self.table = QTableWidget()
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(["State |x>", "Phase", "Counts"])
@@ -168,7 +251,6 @@ class CountsViewTab(QWidget):
         self.table.setStyleSheet("QTableWidget { border: none; }")
         splitter.addWidget(self.table)
         
-        # Graph
         self.graph_widget = pg.PlotWidget()
         self.graph_widget.setBackground(UI_CONFIG["PLOT_BACKGROUND"])
         self.graph_widget.getAxis('left').setPen('#888')
@@ -180,7 +262,6 @@ class CountsViewTab(QWidget):
         splitter.setSizes([350, 600])
         layout.addWidget(splitter, 1)
 
-        # Bottom Analysis Frame
         self.analysis_frame = QFrame()
         self.analysis_frame.setFrameShape(QFrame.StyledPanel)
         bar_layout = QHBoxLayout(self.analysis_frame)
@@ -211,7 +292,6 @@ class CountsViewTab(QWidget):
         N = data['N']
         counts = data['counts']
         
-        # Only show rows with non-zero counts
         nonzero_indices = np.where(counts > 0)[0]
 
         self.table.setRowCount(len(nonzero_indices))
@@ -229,7 +309,6 @@ class CountsViewTab(QWidget):
             item_phase.setTextAlignment(Qt.AlignCenter)
             item_count.setTextAlignment(Qt.AlignCenter)
             
-            # Highlight max count
             if count_val == max_c:
                 c = QColor(UI_CONFIG["COLORS"][1])
                 item_state.setForeground(c)
@@ -250,37 +329,29 @@ class CountsViewTab(QWidget):
             
         self.bar_item.setOpts(x=data['x'], height=counts, width=0.6)
         
-        # -- I'm trying to see how to change ticks without screwing over scaling
         if len(nonzero_indices) > 0:
-            # First and last non zero states
             first_state = np.min(nonzero_indices)
             last_state  = np.max(nonzero_indices)
             buffer = 3
-            
             min_x = max(0, first_state - buffer)
             max_x = min(N - 1, last_state + buffer)
-        
             self.graph_widget.setXRange(min_x, max_x, padding=0)
             
             ax = self.graph_widget.getAxis('bottom')
             ticks = []
+            step = 1
+            if (max_x - min_x) > 20: step = int((max_x - min_x) / 10)
             
-            for x in range(int(min_x), int(max_x) + 1):
+            for x in range(int(min_x), int(max_x) + 1, step):
                 if 0 <= x < len(counts):
-                    if counts[x] > 0:
-                        # Phase calc
-                        phase_val = x / (2**n_qubits)
-                        label = f"{phase_val:.4f}"
-                        ticks.append((x, label))
-            
+                     phase_val = x / (2**n_qubits)
+                     label = f"{phase_val:.3f}"
+                     ticks.append((x, label))
             ax.setTicks([ticks])
-            
         else:
             self.graph_widget.setXRange(0, N)
-        # -----------
+
         est = data['phase_est']
-        
-        # Circular difference
         diff = abs(est - true_phase)
         err = min(diff, 1.0 - diff)
         
@@ -289,10 +360,7 @@ class CountsViewTab(QWidget):
 
         prec_val = data.get('std_error', 0.0)
         self.lbl_spread.setText(f"Standard Error: ±{prec_val:.5f}") 
-        self.lbl_spread.setToolTip("Standard Error of the Mean (Shrinks with more shots)")
     
     def set_y_range(self, max_val):
-        """Fixes the Y-axis range to prevent jumping during animation."""
         self.graph_widget.setYRange(0, max_val, padding=0.1)
         self.graph_widget.enableAutoRange(axis='y', enable=False)
-
