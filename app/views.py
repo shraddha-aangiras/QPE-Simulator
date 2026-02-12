@@ -64,18 +64,26 @@ class MultiQubitPainter(QWidget):
         for i, n in enumerate(self.qubit_range):
             cy = i * row_h + 35
             
-            painter.setPen(col_text)
-            painter.drawText(10, cy + 5, f"{n} qubits")
+            data = self.results.get(n, {})
+            est = data.get('phase_est', 0.0)
+            shots_disp = data.get('shots_count', 0)
+            std_err = data.get('std_error', 1.0)
             
+            painter.setPen(col_text)
+            painter.setFont(QFont("Arial", 11, QFont.Bold))
+            painter.drawText(10, cy - 2, f"{n} qubits")
+            
+            painter.setFont(QFont("Arial", 9))
+            painter.setPen(QColor("#bbb"))
+            painter.drawText(10, cy + 14, f"({shots_disp} shots)")
+            painter.setFont(QFont("Arial", 11))
+
             line_start = margin_left
             line_end = margin_left + line_w
             painter.setPen(QPen(col_line, 2))
             painter.drawLine(line_start, cy, line_end, cy)
             painter.drawLine(line_start, cy-5, line_start, cy+5)
             painter.drawLine(line_end, cy-5, line_end, cy+5)
-            
-            data = self.results[n]
-            est = data['phase_est']
             
             est_px = int(margin_left + est * line_w)
             true_px = int(margin_left + self.phase_true * line_w)
@@ -86,7 +94,6 @@ class MultiQubitPainter(QWidget):
             limit_width = 1.0 / (2**n)
             limit_px = int(limit_width * line_w)
             
-            std_err = data.get('std_error', 1.0)
             conf_px = int((std_err * 4.0) * line_w)
             conf_px = max(conf_px, 2)
             
