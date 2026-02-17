@@ -110,9 +110,11 @@ class QPE_LabInterface(QMainWindow):
         self.main_counts_accum = np.zeros(len(self.main_probs), dtype=int)
 
         # Fix Y-axis to prevent jumping
-        max_prob = np.max(self.main_probs)
-        expected_peak = max_prob * self.total_expected_events
-        y_limit = expected_peak + 4 * np.sqrt(expected_peak)
+        # max_prob = np.max(self.main_probs)
+        # expected_peak = max_prob * self.total_expected_events
+        # y_limit = expected_peak + 4 * np.sqrt(expected_peak)
+
+        y_limit = self.total_expected_events
         y_limit = max(y_limit, 10)
         self.tab_counts.set_y_range(y_limit)
         
@@ -151,6 +153,7 @@ class QPE_LabInterface(QMainWindow):
                 "phase_est": mean_est,
                 "std_dev_fraction": std_dev,
                 "std_error": std_error,
+                "counts": self.main_counts_accum,
                 "N": len(self.main_probs)
             }
             self.tab_counts.update_data(data_packet, self.tgt_phase, self.tgt_n)

@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QPointF
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush, QPolygonF
-
+from app.calc import get_theoretical_curve
 from app.style import UI_CONFIG, USE_RADIANS
 
 class MultiQubitPainter(QWidget):
@@ -39,7 +39,6 @@ class MultiQubitPainter(QWidget):
         row_h = 70
         line_w = w - margin_left - margin_right
 
-        # --- 1. NORMALIZE TRUE PHASE ---
         # Ensure we always draw using 0.0-1.0 range
         if USE_RADIANS:
             norm_true_phase = self.phase_true / (2 * np.pi)
@@ -64,9 +63,9 @@ class MultiQubitPainter(QWidget):
             cy = top_offset + 30 + (i * row_h) + 35
             
             data = self.results.get(n, {})
-            est = data.get('phase_est', 0.0)    # This comes Normalized (0-1) from calc.py
+            est = data.get('phase_est', 0.0)  
             shots_disp = data.get('shots_count', 0)
-            std_err = data.get('std_error', 1.0) # This comes Normalized (0-1) from calc.py
+            std_err = data.get('std_error', 1.0)
             
             if i % 2 == 0:
                 painter.fillRect(0, cy - 35, w, row_h, QColor(255, 255, 255, 5))
@@ -83,7 +82,7 @@ class MultiQubitPainter(QWidget):
             painter.setPen(QPen(QColor("#666"), 2))
             painter.drawLine(margin_left, cy, margin_left + line_w, cy)
             
-            # --- TARGET BIN LOGIC ---
+            # TARGET BIN LOGIC 
             N_bins = 2**n
             bin_w = 1.0 / N_bins
 
@@ -97,17 +96,13 @@ class MultiQubitPainter(QWidget):
 
             # --- ESTIMATE & UNCERTAINTY ---
             
-            # 1. Estimate (Star) Position
-            # est is normalized, so this is correct [0..line_w]
+            # Estimate (Star) Position
             est_px = int(margin_left + est * line_w)
             
-            # 2. True Phase (Blue Line) Position [FIXED]
-            # Use norm_true_phase (0-1) instead of raw radians
+            # True Phase (Blue Line) Position
             true_px = int(margin_left + norm_true_phase * line_w)
 
-            # 3. Purple Bar (Shot Noise)
-            # std_err is normalized fraction (e.g. 0.01 for 1% of circle)
-            # We multiply by 4.0 for +/- 2 sigma
+            # Purple Bar (Shot Noise)
             conf_width = std_err * 4.0
             conf_px = int(conf_width * line_w)
             
@@ -125,17 +120,17 @@ class MultiQubitPainter(QWidget):
             # Draw Star
             self.draw_star(painter, est_px, cy, 10, self.c_est)
 
-            # --- METRICS ---
+            # METRICS
             metrics_x = w - margin_right + 20
             
             est_idx = int(round(est * N_bins)) % N_bins
             is_resolved = (est_idx == ideal_idx)
             
-            # Calc distance using NORMALIZED values
+            # Calc distance using normalized vals
             dist = abs(est - norm_true_phase)
             dist = min(dist, 1.0 - dist) 
 
-            # Scale up for Text Display ONLY
+            # Scale up for Text Display
             if USE_RADIANS:
                 disp_est = est * 2 * np.pi
                 disp_err = dist * 2 * np.pi
@@ -176,15 +171,15 @@ class MultiQubitPainter(QWidget):
         if left_val >= 0 and right_val <= 1.0:
             draw_rect(left_val, right_val)
             
-        # Left Wrap (e.g. -0.1 to 0.1) -> Draws on Right end AND Left end
+        # Left Wrap (e.g. -0.1 to 0.1)
         elif left_val < 0:
-            draw_rect(0.0, right_val)       # Left side part
-            draw_rect(1.0 + left_val, 1.0)  # Wrapped Right side part
+            draw_rect(0.0, right_val) 
+            draw_rect(1.0 + left_val, 1.0)
 
         # Right Wrap (e.g. 0.9 to 1.1)
         elif right_val > 1.0:
-            draw_rect(left_val, 1.0)        # Right side part
-            draw_rect(0.0, right_val - 1.0) # Wrapped Left side part
+            draw_rect(left_val, 1.0) 
+            draw_rect(0.0, right_val - 1.0)
 
     def draw_legend(self, painter, w, h_offset):
         painter.setBrush(QColor(30, 30, 30))
@@ -264,6 +259,10 @@ class CountsViewTab(QWidget):
         self.graph_widget.getAxis('bottom').setPen('#888')
         self.bar_item = pg.BarGraphItem(x=[0], height=[0], width=0.6, brush=UI_CONFIG["COLORS"][1], pen=None)
         self.graph_widget.addItem(self.bar_item)
+        self.theory_curve = pg.PlotCurveItem(
+            pen=pg.mkPen(color='#FFFFFF', width=2, style=Qt.DashLine)
+        )
+        self.graph_widget.addItem(self.theory_curve)
         splitter.addWidget(self.graph_widget)
         splitter.setSizes([350, 600])
         layout.addWidget(splitter, 1)
@@ -333,6 +332,10 @@ class CountsViewTab(QWidget):
             self.table.setItem(row_idx, 2, item_count)
             
         self.bar_item.setOpts(x=data['x'], height=counts, width=0.6)
+        total_shots = np.sum(counts) if np.sum(counts) > 0 else 100 # Fallback
+        
+        x_smooth, y_smooth = get_theoretical_curve(n_qubits, true_phase, total_shots)
+        self.theory_curve.setData(x_smooth, y_smooth)
         
         if len(nonzero_indices) > 0:
             first_state = np.min(nonzero_indices)

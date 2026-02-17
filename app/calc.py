@@ -107,3 +107,34 @@ def get_ideal_probs(n_qubits, phase_val):
         prob_arr /= np.sum(prob_arr)
         
     return prob_arr
+
+def get_theoretical_curve(n, phase_val, shots, points=400):
+    """
+    Generates x and y arrays for the theoretical probability curve.
+    x is scaled to [0, N], y is scaled to total counts.
+    """
+    N = 2**n
+    x_smooth = np.linspace(0, N, points)
+
+    if USE_RADIANS:
+        norm_phase = phase_val / (2 * np.pi)
+    else:
+        norm_phase = phase_val
+
+    # Avoid division by zero
+    delta = norm_phase - (x_smooth / N)
+    
+    num = np.sin(np.pi * N * delta) ** 2
+    denom = np.sin(np.pi * delta) ** 2
+    
+    # Handle singularities [when delta is an int ie perfect match]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        y_probs = (1 / (N**2)) * (num / denom)
+    
+    # Fix NaNs (where num and denom are both 0 -> limit is 1.0)
+    y_probs[np.isnan(y_probs)] = 1.0
+    
+    # Scale probabilities to match the histogram counts
+    y_counts = y_probs * shots
+    
+    return x_smooth, y_counts
