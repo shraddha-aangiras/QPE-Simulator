@@ -59,7 +59,8 @@ class QPE_LabInterface(QMainWindow):
         # Animation State
         self.timer = QTimer()
         self.timer.timeout.connect(self.animation_step)
-        self.anim_duration = 5  # seconds
+        shots = self.controls.num_shots.value()
+        self.anim_duration = 5 if shots > 20 else (shots / 4) # seconds
         self.frame_rate = 30      # FPS
         self.timer_interval = int(1000 / self.frame_rate)
         
@@ -75,8 +76,7 @@ class QPE_LabInterface(QMainWindow):
         self.tgt_photons = self.controls.num_photons.value()
         self.tgt_n = self.controls.num_qubits.value()
         
-        # --- TAB 2: INSTANT CALCULATION (No Animation) ---
-        # Calculate fair comparison budget
+        self.anim_duration = 5 if self.tgt_shots > 20 else max((self.tgt_shots / 4.0), 0.1)
         resource_budget = self.tgt_n * self.tgt_shots
         self.tab_scaling.phase_true = self.tgt_phase
         
