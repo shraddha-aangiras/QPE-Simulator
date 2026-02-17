@@ -18,18 +18,12 @@ class MultiQubitPainter(QWidget):
         self.phase_true = 0.0
         self.results = {}
         
-        # --- COLOR PALETTE ---
-        self.c_true_line = QColor("#3498db")    # Solid Blue Line
-        
-        # Grey Color for Limit
-        self.c_limit_border = QColor("#7f8c8d") 
-        
-        self.c_est = QColor("#f1c40f")          # Gold Star
-        
-        # Purple Uncertainty (Semi-transparent fill)
+        # Colors
+        self.c_true_line = QColor("#3498db")    # Blue
+        self.c_limit_border = QColor("#7f8c8d") # Grey
+        self.c_est = QColor("#f1c40f")          # Gold
         self.c_conf = QColor(UI_CONFIG["COLORS"][0]) 
         self.c_conf.setAlpha(100) 
-        
         self.c_text = Qt.white
         self.c_grid = QColor("#444")
         self.c_shots = QColor("#bdc3c7")
@@ -40,7 +34,7 @@ class MultiQubitPainter(QWidget):
         
         w = self.width()
         
-        # Layout Constants
+        # Layout
         margin_left = 120
         margin_right = 220
         top_offset = 80 
@@ -50,7 +44,7 @@ class MultiQubitPainter(QWidget):
         # --- 1. Draw Legend ---
         self.draw_legend(painter, w, top_offset)
 
-        # --- 2. Draw Column Headers ---
+        # --- 2. Headers ---
         header_y = top_offset + 10
         painter.setPen(QColor("#aaa"))
         painter.setFont(QFont("Arial", 10, QFont.Bold))
@@ -61,21 +55,20 @@ class MultiQubitPainter(QWidget):
         painter.setPen(QPen(self.c_grid, 1))
         painter.drawLine(0, header_y + 10, w, header_y + 10)
 
-        # --- 3. Draw Rows ---
+        # --- 3. Rows ---
         for i, n in enumerate(range(1, 11)):
             cy = top_offset + 30 + (i * row_h) + 35
             
-            # Retrieve Data
             data = self.results.get(n, {})
             est = data.get('phase_est', 0.0)
             shots_disp = data.get('shots_count', 0)
             std_err = data.get('std_error', 1.0)
             
-            # -- Row Background --
+            # Row Bg
             if i % 2 == 0:
                 painter.fillRect(0, cy - 35, w, row_h, QColor(255, 255, 255, 5))
 
-            # -- LEFT: Qubits & Shots --
+            # Left Text
             painter.setPen(self.c_text)
             painter.setFont(QFont("Arial", 12, QFont.Bold))
             painter.drawText(15, cy - 5, f"{n} Qubits")
@@ -84,47 +77,36 @@ class MultiQubitPainter(QWidget):
             painter.setPen(self.c_shots)
             painter.drawText(15, cy + 12, f"Cost: {shots_disp} shots")
 
-            # -- CENTER: Visualization --
+            # Center Visualization
             line_start = margin_left
             line_end = margin_left + line_w
             
-            # Base Axis
+            # Axis Line
             painter.setPen(QPen(QColor("#666"), 2))
             painter.drawLine(line_start, cy, line_end, cy)
             
-            # Calculate Positions
             est_px = int(margin_left + est * line_w)
             true_px = int(margin_left + self.phase_true * line_w)
             
-            # --- TARGET LOGIC: NEAREST INTEGER ---
-            # 1. Determine "Best Possible Hardware State" (Rounding)
+            # --- Hardware Limit (Containing Bin) ---
             N_bins = 2**n
             
-            # Find the bin index closest to the true phase
-            # Example: 0.3 * 2 = 0.6 -> Rounds to 1. Target is Bin 1.
-            best_bin_index = int(round(self.phase_true * N_bins))
-            if best_bin_index >= N_bins: best_bin_index = 0 # Wrap around 1.0 -> 0.0
+            # Find the bin index containing the true phase (floor)
+            bin_idx = int(np.floor(self.phase_true * N_bins))
+            if bin_idx >= N_bins: bin_idx = N_bins - 1
             
-            # 2. Draw the "Target Box" around that ideal state
-            # This shows the user: "This is the bin you SHOULD land in"
-            target_center_val = best_bin_index / N_bins
-            
-            # Box is 1/N wide, centered on the ideal state
+            bin_start_val = bin_idx / N_bins
             bin_width_val = 1.0 / N_bins
             
-            # Convert to pixels
-            box_center_px = int(margin_left + target_center_val * line_w)
+            # Draw from left edge of bin
+            box_start_px = int(margin_left + bin_start_val * line_w)
             box_width_px = max(int(bin_width_val * line_w), 4)
-            box_start_px = box_center_px - box_width_px // 2
             
-            # --- DRAWING ---
-            
-            # 1. Hardware Limit (Grey Dashed Box) - The Target Zone
             painter.setPen(QPen(self.c_limit_border, 1, Qt.DashLine))
             painter.setBrush(Qt.NoBrush)
             painter.drawRect(box_start_px, cy - 15, box_width_px, 30)
 
-            # 2. Uncertainty Bar (Purple)
+            # --- Uncertainty (Purple Bar) ---
             conf_width = std_err * 4.0
             conf_px = int(conf_width * line_w)
             c_box_x = est_px - conf_px // 2
@@ -133,45 +115,38 @@ class MultiQubitPainter(QWidget):
             painter.setBrush(QBrush(self.c_conf))
             painter.drawRect(c_box_x, cy - 4, conf_px, 8)
 
-            # 3. True Phase Line (Solid Blue)
+            # --- True Phase Line ---
             painter.setPen(QPen(self.c_true_line, 2))
             painter.drawLine(true_px, cy - 20, true_px, cy + 20)
 
-            # 4. Estimate (Gold Star)
+            # --- Estimate Star ---
             self.draw_star(painter, est_px, cy, 10, self.c_est)
 
-            # -- RIGHT: Metrics (Hit/Miss) --
-            
-            # HIT LOGIC: Distance Check
-            # If the error is less than half a bin width, we successfully resolved the state.
+            # --- Right: Metrics ---
             dist = abs(est - self.phase_true)
             dist = min(dist, 1.0 - dist) # Circular distance
             
             threshold = (1.0 / N_bins) / 2.0
-            # Small epsilon for float comparison
             is_resolved = dist < (threshold + 1e-9)
             
             metrics_x = w - margin_right + 20
             
             painter.setFont(QFont("Arial", 10, QFont.Bold))
             if is_resolved:
-                painter.setPen(QColor("#2ecc71")) # Green
+                painter.setPen(QColor("#2ecc71"))
                 painter.drawText(metrics_x, cy - 10, "✔ Correct Bin")
             else:
-                painter.setPen(QColor("#e67e22")) # Orange
+                painter.setPen(QColor("#e67e22"))
                 painter.drawText(metrics_x, cy - 10, "⚠ Incorrect Bin")
             
             painter.setFont(QFont("Arial", 9))
             
-            # 1. Estimate Value
             painter.setPen(QColor("#f1c40f")) 
-            painter.drawText(metrics_x, cy + 2, f"Est:   {est:.5f}")
+            painter.drawText(metrics_x, cy + 2, f"Est:    {est:.5f}")
             
-            # 2. Error Value
             painter.setPen(QColor("#bbb"))
-            painter.drawText(metrics_x, cy + 14, f"Err:   {dist:.5f}")
+            painter.drawText(metrics_x, cy + 14, f"Err:    {dist:.5f}")
             
-            # 3. Bin Width
             painter.setPen(QColor("#7f8c8d"))
             painter.drawText(metrics_x, cy + 26, f"Bin Size: {bin_width_val:.5f}")
 
@@ -186,14 +161,14 @@ class MultiQubitPainter(QWidget):
         font = QFont("Arial", 10)
         painter.setFont(font)
         
-        # 1. True Phase
+        # True Phase
         painter.setPen(QPen(self.c_true_line, 2))
         painter.drawLine(x, y+10, x, y-10)
         painter.setPen(Qt.white)
         painter.drawText(x + 10, y + 5, "True Phase")
         
         x += spacing
-        # 2. Limit Box
+        # Hardware Limit
         painter.setPen(QPen(self.c_limit_border, 1, Qt.DashLine))
         painter.setBrush(Qt.NoBrush)
         painter.drawRect(x, y - 10, 20, 20)
@@ -201,13 +176,13 @@ class MultiQubitPainter(QWidget):
         painter.drawText(x + 30, y + 5, "Hardware Resolution")
         
         x += spacing + 30
-        # 3. Estimate
+        # Estimate
         self.draw_star(painter, x, y, 8, self.c_est)
         painter.setPen(Qt.white)
         painter.drawText(x + 15, y + 5, "Estimate")
         
         x += spacing
-        # 4. Uncertainty
+        # Uncertainty
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(self.c_conf))
         painter.drawRect(x, y - 4, 20, 8)
@@ -230,7 +205,7 @@ class MultiQubitPainter(QWidget):
         painter.drawPolygon(QPolygonF(points))
 
 class CountsViewTab(QWidget):
-    """Top Tab: Table and Bar Graph. (Unchanged)"""
+    """Top Tab: Table and Bar Graph."""
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -344,9 +319,9 @@ class CountsViewTab(QWidget):
             
             for x in range(int(min_x), int(max_x) + 1, step):
                 if 0 <= x < len(counts):
-                     phase_val = x / (2**n_qubits)
-                     label = f"{phase_val:.3f}"
-                     ticks.append((x, label))
+                      phase_val = x / (2**n_qubits)
+                      label = f"{phase_val:.3f}"
+                      ticks.append((x, label))
             ax.setTicks([ticks])
         else:
             self.graph_widget.setXRange(0, N)
