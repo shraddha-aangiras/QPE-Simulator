@@ -1,7 +1,7 @@
 import numpy as np
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QSpinBox, QPushButton
 from app.components import SliderWithEdit
-from app.style import UI_CONFIG
+from app.style import UI_CONFIG, USE_RADIANS
 
 class QPEControlPanel(QFrame):
     def __init__(self, parent=None):
@@ -19,9 +19,16 @@ class QPEControlPanel(QFrame):
         layout.addSpacing(5)
         
         # Phase Control
-        layout.addWidget(QLabel("Target Phase (φ): [0, 1]"))
-        self.phase_input = SliderWithEdit(self, min=0.0, max=1.0, step=0.001)
-        self.phase_input.setValue(0.3)
+        if USE_RADIANS:
+            layout.addWidget(QLabel("Target Phase (φ): [0, 2π]"))
+            # Max is 2*pi (~6.28)
+            self.phase_input = SliderWithEdit(self, min=0.0, max=2*np.pi, step=0.001)
+            self.phase_input.setValue(0.3*2*np.pi) # Default to pi
+        else:
+            layout.addWidget(QLabel("Target Phase (φ): [0, 1]"))
+            self.phase_input = SliderWithEdit(self, min=0.0, max=1.0, step=0.001)
+            self.phase_input.setValue(0.3)
+
         layout.addWidget(self.phase_input)
         
         # Shots
