@@ -1,3 +1,6 @@
 numpy
 PyQt5
 pyqtgraph
+streamlit
+plotly
+watchdog

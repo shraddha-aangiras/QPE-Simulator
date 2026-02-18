@@ -2,3 +2,4 @@
 .DS_Store
 app/all_code.txt
 app/__pycache__
+web_main.py
