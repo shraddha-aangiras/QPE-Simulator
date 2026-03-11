@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QTabWidget, QScrollArea
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QTabWidget, QScrollArea, QLabel
 from PyQt5 import QtCore
 from PyQt5.QtCore import QTimer
 import numpy as np
@@ -37,7 +37,20 @@ class QPE_LabInterface(QMainWindow):
             QTabBar::tab { background: #353535; color: #aaa; padding: 8px 20px; border: 1px solid #444; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; margin-right: 2px; }
             QTabBar::tab:selected { background: #2b2b2b; color: white; border-top: 2px solid #3498db; }
         """)
+
+        # Connecting tab
+        self.tab_connector = QWidget()
+        conn_layout = QVBoxLayout(self.tab_connector)
         
+        # Optional placeholder label so it isn't completely empty
+        placeholder_label = QLabel("Hardware / Simulator Connection Settings")
+        placeholder_label.setStyleSheet("color: #aaa; font-size: 16px;")
+        placeholder_label.setAlignment(QtCore.Qt.AlignCenter)
+        conn_layout.addWidget(placeholder_label)
+        
+        self.tabs.addTab(self.tab_connector, "Single shot interferometer")
+
+        # Counts View Tab
         self.tab_counts = CountsViewTab()
         self.tabs.addTab(self.tab_counts, "Counts View")
         
@@ -49,6 +62,7 @@ class QPE_LabInterface(QMainWindow):
         self.tabs.addTab(self.scroll_area, "1-10 Qubit Scaling")
         
         main_layout.addWidget(self.tabs)
+        self.tabs.currentChanged.connect(self.disconnect_refresh_tab)
         
         self.controls.phase_input.valueChanged.connect(self.trigger_animation)
         self.controls.num_shots.valueChanged.connect(self.trigger_animation)
@@ -66,6 +80,7 @@ class QPE_LabInterface(QMainWindow):
         
         # Start initial
         self.trigger_animation()
+        self.disconnect_refresh_tab(self.tabs.currentIndex())
 
     def trigger_animation(self):
         """Prepares state and starts the timer."""
@@ -160,21 +175,11 @@ class QPE_LabInterface(QMainWindow):
             
         if is_finished:
             self.timer.stop()
-
-
-if __name__ == "__main__":
-    if hasattr(QtCore.Qt, 'AA_EnableHighDpiScaling'):
-        QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
-    if hasattr(QtCore.Qt, 'AA_UseHighDpiPixmaps'):
-        QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
-
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    
-    window = QPE_LabInterface()
-    window.show()
-    
-    sys.exit(app.exec_())
+    def disconnect_refresh_tab(self, index):
+        if index == 0:
+            self.controls.refresh_btn.setEnabled(False)
+        else:
+            self.controls.refresh_btn.setEnabled(True)
 
     # def update_all(self):
     #     phase = self.controls.phase_input.value()

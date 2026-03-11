@@ -53,15 +53,19 @@ class QPEControlPanel(QFrame):
         self.refresh_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {UI_CONFIG['COLORS'][4]}; 
-                color: white; 
+                color: {UI_CONFIG['BTN_TEXT']}; 
                 font-weight: bold; 
                 border-radius: 5px;
             }}
             QPushButton:hover {{
-                background-color: #3e5f41;
+                background-color: {UI_CONFIG['BTN_HOVER']};
             }}
             QPushButton:pressed {{
-                background-color: #2c442e;
+                background-color: {UI_CONFIG['BTN_PRESSED']};
+            }}
+            QPushButton:disabled {{
+                background-color: {UI_CONFIG['BTN_DISABLED_BG']};
+                color: {UI_CONFIG['BTN_DISABLED_TEXT']};
             }}
         """)
         layout.addWidget(self.refresh_btn)
