@@ -41,7 +41,8 @@ class MultiQubitPainter(QWidget):
 
         # Ensure we always draw using 0.0-1.0 range
         if USE_RADIANS:
-            norm_true_phase = self.phase_true / (2 * np.pi)
+            #norm_true_phase = self.phase_true / (2 * np.pi)
+            norm_true_phase = self.phase_true / 2.0
         else:
             norm_true_phase = self.phase_true
 
@@ -132,13 +133,13 @@ class MultiQubitPainter(QWidget):
 
             # Scale up for Text Display
             if USE_RADIANS:
-                disp_est = est * 2 * np.pi
-                disp_err = dist * 2 * np.pi
-                disp_bin = bin_w * 2 * np.pi
+                disp_est = f"{est * 2:.5f}π"
+                disp_err = f"{dist * 2:.5f}π"
+                disp_bin = f"{bin_w * 2:.5f}π"
             else:
-                disp_est = est
-                disp_err = dist
-                disp_bin = bin_w
+                disp_est = f"{est:.5f}"
+                disp_err = f"{dist:.5f}"
+                disp_bin = f"{bin_w:.5f}"
             
             painter.setFont(QFont("Arial", 10, QFont.Bold))
             if is_resolved:
@@ -302,7 +303,7 @@ class CountsViewTab(QWidget):
             count_val = counts[state_idx]
             phase_val = state_idx / N
             if USE_RADIANS:
-                txt_phase = f"{(phase_val * 2 * np.pi):.4f}"
+                txt_phase = f"{(phase_val * 2):.4f}π"
             else:
                 txt_phase = f"{phase_val:.4f}"
             item_state = QTableWidgetItem(f"|{state_idx:0{n_qubits}b}>")
@@ -353,7 +354,7 @@ class CountsViewTab(QWidget):
                 if 0 <= x < len(counts):
                       phase_val = x / (2**n_qubits)
                       if USE_RADIANS:
-                          label = f"{(phase_val * 2 * np.pi):.2f}"
+                          label = f"{(phase_val * 2):.2f}π"
                       else:
                           label = f"{phase_val:.3f}"
                       ticks.append((x, label))
@@ -365,15 +366,15 @@ class CountsViewTab(QWidget):
         diff = abs(est - true_phase)
 
         if USE_RADIANS:
-            val_est = est * 2 * np.pi
+            val_est = est * 2 
             val_err = abs(val_est - true_phase) # Radian diff
-            val_err = min(val_err, 2*np.pi - val_err) # Circular diff
+            val_err = min(val_err, 2.0 - val_err) # Circular diff
             
-            self.lbl_est.setText(f"Est Phase: {val_est:.5f}")
-            self.lbl_err.setText(f"Error: {val_err:.5f}")
+            self.lbl_est.setText(f"Est Phase: {val_est:.5f}π")
+            self.lbl_err.setText(f"Error: {val_err:.5f}π")
             
-            prec_val = data.get('std_error', 0.0) * 2 * np.pi
-            self.lbl_spread.setText(f"Standard Error: ±{prec_val:.5f}")
+            prec_val = data.get('std_error', 0.0) * 2 
+            self.lbl_spread.setText(f"Standard Error: ±{prec_val:.5f}π")
         else:
             err = min(diff, 1.0 - diff)
             self.lbl_est.setText(f"Est Phase: {est:.5f}")

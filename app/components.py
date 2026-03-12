@@ -1,5 +1,6 @@
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSlider, QDoubleSpinBox
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSlider, QDoubleSpinBox, QLabel
+from app.style import USE_RADIANS
 
 class SliderWithEdit(QWidget):
     """A combined Slider and SpinBox for float values."""
@@ -36,10 +37,16 @@ class SliderWithEdit(QWidget):
 
         if vertical:
             layout.addWidget(self.edit)
+            if USE_RADIANS:
+                pi_label = QLabel("π")
+                layout.addWidget(pi_label)
             layout.addWidget(self.slider)
         else:
             layout.addWidget(self.slider)
             layout.addWidget(self.edit)
+            if USE_RADIANS:
+                pi_label = QLabel("π")
+                layout.addWidget(pi_label)
             
         self.setLayout(layout)
 

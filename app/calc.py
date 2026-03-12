@@ -50,7 +50,8 @@ def get_qpe_data(n_qubits, phase_val, shots, mean_photons=1, use_poisson=False):
     Simulates a quantum optical experiment.
     """
     if USE_RADIANS:
-        norm_phase = phase_val / (2 * np.pi)
+        #norm_phase = phase_val / (2 * np.pi)
+        norm_phase = phase_val / 2.0
     else:
         norm_phase = phase_val
 
@@ -93,7 +94,8 @@ def get_qpe_data(n_qubits, phase_val, shots, mean_photons=1, use_poisson=False):
 def get_ideal_probs(n_qubits, phase_val):
     """Helper to pre-calculate probabilities for the animation loop."""
     if USE_RADIANS:
-        norm_phase = phase_val / (2 * np.pi)
+        #norm_phase = phase_val / (2 * np.pi)
+        norm_phase = phase_val / 2.0
     else:
         norm_phase = phase_val
 
@@ -117,7 +119,8 @@ def get_theoretical_curve(n, phase_val, shots, points=400):
     x_smooth = np.linspace(0, N, points)
 
     if USE_RADIANS:
-        norm_phase = phase_val / (2 * np.pi)
+        #norm_phase = phase_val / (2 * np.pi)
+        norm_phase = phase_val / 2.0
     else:
         norm_phase = phase_val
 

@@ -22,8 +22,9 @@ class QPEControlPanel(QFrame):
         if USE_RADIANS:
             layout.addWidget(QLabel("Target Phase (φ): [0, 2π]"))
             # Max is 2*pi (~6.28)
-            self.phase_input = SliderWithEdit(self, min=0.0, max=2*np.pi, step=0.001)
-            self.phase_input.setValue(0.3*2*np.pi) # Default to pi
+            #self.phase_input = SliderWithEdit(self, min=0.0, max=2*np.pi, step=0.001)
+            self.phase_input = SliderWithEdit(self, min=0.0, max=2.0, step=0.001)
+            self.phase_input.setValue(0.5) # Default to pi
         else:
             layout.addWidget(QLabel("Target Phase (φ): [0, 1]"))
             self.phase_input = SliderWithEdit(self, min=0.0, max=1.0, step=0.001)
