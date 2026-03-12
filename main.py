@@ -8,6 +8,7 @@ from app.style import get_dark_palette
 from app.calc import get_ideal_probs, get_circular_stats
 from app.controls import QPEControlPanel
 from app.views import CountsViewTab, MultiQubitPainter
+from app.views import CountsViewTab, MultiQubitPainter, SinglePhotonTab
 
 class QPE_LabInterface(QMainWindow):
     def __init__(self):
@@ -39,15 +40,7 @@ class QPE_LabInterface(QMainWindow):
         """)
 
         # Connecting tab
-        self.tab_connector = QWidget()
-        conn_layout = QVBoxLayout(self.tab_connector)
-        
-        # Optional placeholder label so it isn't completely empty
-        placeholder_label = QLabel("Hardware / Simulator Connection Settings")
-        placeholder_label.setStyleSheet("color: #aaa; font-size: 16px;")
-        placeholder_label.setAlignment(QtCore.Qt.AlignCenter)
-        conn_layout.addWidget(placeholder_label)
-        
+        self.tab_connector = SinglePhotonTab()
         self.tabs.addTab(self.tab_connector, "Single shot interferometer")
 
         # Counts View Tab
