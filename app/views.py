@@ -12,6 +12,7 @@ from PyQt5.QtSvg import QSvgWidget
 from app.calc import get_theoretical_curve
 from app.style import UI_CONFIG, USE_RADIANS
 
+
 class InterferometerOverlay(QWidget):
     def __init__(self, image_path):
         super().__init__()
@@ -19,80 +20,109 @@ class InterferometerOverlay(QWidget):
         self.setMinimumSize(500, 350)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        self.det0_x_pct = 0.9
-        self.det0_y_pct = 0.10 
+        self.max_screen_w_pct = 0.55
+        self.max_screen_h_pct = 0.55
 
-        self.det1_x_pct = 0.95
-        self.det1_y_pct = 0.28  
+        self.p0 = 1.0
+        self.p1 = 0.0
+        self.count0 = 0
+        self.count1 = 0
+        
+        self.flash0 = False
+        self.flash1 = False
 
-        self.det0_container = QWidget(self)
-        hbox0 = QHBoxLayout(self.det0_container)
-        hbox0.setContentsMargins(0, 0, 0, 0)
-        hbox0.setSpacing(10)
-        
-        self.light0 = PhotonLight(color_on="#3498db")
-        self.lbl_0 = QLabel("0")
-        self.lbl_0.setAlignment(Qt.AlignCenter)
-        self.lbl_0.setStyleSheet("font-size: 20px; font-weight: bold; color: white;")
-        self.prob0_lbl = QLabel("Probability: 100.0%")
-        self.prob0_lbl.setAlignment(Qt.AlignCenter)
-        self.prob0_lbl.setStyleSheet("font-size: 14px; color: #aaa;")
-        
-        hbox0.addWidget(self.light0, alignment=Qt.AlignCenter)
-        hbox0.addWidget(self.lbl_0)
-        hbox0.addWidget(self.prob0_lbl)
-        self.det0_container.adjustSize() 
+        self.det0_x_pct = 0.75
+        self.det0_y_pct = 0.1
 
-        self.det1_container = QWidget(self)
-        hbox1 = QHBoxLayout(self.det1_container)
-        hbox1.setContentsMargins(0, 0, 0, 0)
-        hbox1.setSpacing(10)
-        
-        self.light1 = PhotonLight(color_on="#e74c3c")
-        self.lbl_1 = QLabel("1")
-        self.lbl_1.setAlignment(Qt.AlignCenter)
-        self.lbl_1.setStyleSheet("font-size: 20px; font-weight: bold; color: white;")
-        self.prob1_lbl = QLabel("Probability: 0.0%")
-        self.prob1_lbl.setAlignment(Qt.AlignCenter)
-        self.prob1_lbl.setStyleSheet("font-size: 14px; color: #aaa;")
-        
-        hbox1.addWidget(self.light1, alignment=Qt.AlignCenter)
-        hbox1.addWidget(self.lbl_1)
-        hbox1.addWidget(self.prob1_lbl)
-        self.det1_container.adjustSize()
+        self.det1_x_pct = 0.85
+        self.det1_y_pct = 0.28
+
+    def set_probabilities(self, p0, p1):
+        self.p0 = p0
+        self.p1 = p1
+        self.update() 
+
+    def set_counts(self, c0, c1):
+        self.count0 = c0
+        self.count1 = c1
+        self.update()
+
+    def trigger_flash(self, det_idx):
+        if det_idx == 0:
+            self.flash0 = True
+        else:
+            self.flash1 = True
+        self.update()
+
+    def reset_flashes(self):
+        self.flash0 = False
+        self.flash1 = False
+        self.update()
 
     def paintEvent(self, event):
-        if not self.pixmap.isNull():
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing)
-            painter.setRenderHint(QPainter.SmoothPixmapTransform)
-            
-            scaled_pix = self.pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            x = (self.width() - scaled_pix.width()) // 2
-            y = (self.height() - scaled_pix.height()) // 2
-            painter.drawPixmap(x, y, scaled_pix)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
         if self.pixmap.isNull(): return
-
-        scaled_pix = self.pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        img_w = scaled_pix.width()
-        img_h = scaled_pix.height()
-        img_x = (self.width() - img_w) / 2
-        img_y = (self.height() - img_h) / 2
-
-        d0_x = img_x + (img_w * self.det0_x_pct)
-        d0_y = img_y + (img_h * self.det0_y_pct)
         
-        d1_x = img_x + (img_w * self.det1_x_pct)
-        d1_y = img_y + (img_h * self.det1_y_pct)
-
-        self.det0_container.move(int(d0_x - self.det0_container.width()/2),
-                                 int(d0_y - self.det0_container.height()/2))
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
         
-        self.det1_container.move(int(d1_x - self.det1_container.width()/2),
-                                 int(d1_y - self.det1_container.height()/2))
+        from PyQt5.QtWidgets import QApplication
+        screen_rect = QApplication.primaryScreen().availableGeometry()
+        max_w = screen_rect.width() * self.max_screen_w_pct
+        max_h = screen_rect.height() * self.max_screen_h_pct
+
+        target_size = self.size()
+        if target_size.width() > max_w:
+            target_size.setWidth(int(max_w))
+        if target_size.height() > max_h:
+            target_size.setHeight(int(max_h))
+
+        scaled_pix = self.pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        img_x = (self.width() - scaled_pix.width()) // 2
+        img_y = (self.height() - scaled_pix.height()) // 2
+        painter.drawPixmap(img_x, img_y, scaled_pix)
+
+        scale = min(scaled_pix.height() / 400.0, 1.3)
+
+        d0_cx = img_x + (scaled_pix.width() * self.det0_x_pct)
+        d0_cy = img_y + (scaled_pix.height() * self.det0_y_pct)
+        self.draw_detector(painter, d0_cx, d0_cy, "0", self.p0, self.count0, self.flash0, QColor("#3498db"), scale)
+
+        d1_cx = img_x + (scaled_pix.width() * self.det1_x_pct)
+        d1_cy = img_y + (scaled_pix.height() * self.det1_y_pct)
+        self.draw_detector(painter, d1_cx, d1_cy, "1", self.p1, self.count1, self.flash1, QColor("#e74c3c"), scale)
+
+    def draw_detector(self, painter, cx, cy, label_text, prob, count, is_flashing, on_color, scale):
+        radius = int(22 * scale)
+        big_font = max(10, int(18 * scale))
+        small_font = max(8, int(13 * scale))
+
+        painter.setPen(QPen(QColor("#222"), max(2, int(3 * scale))))
+        brush_color = on_color if is_flashing else QColor("#353535")
+        painter.setBrush(QBrush(brush_color))
+
+        if is_flashing:
+            painter.setPen(QPen(Qt.white, max(1, int(2 * scale))))
+
+        painter.drawEllipse(QPointF(cx, cy), radius, radius)
+
+        painter.setPen(Qt.white)
+        painter.setFont(QFont("Arial", big_font, QFont.Bold))
+        text_x = cx + radius + int(10 * scale)
+        painter.drawText(int(text_x), int(cy + (big_font/3)), label_text)
+
+        prob_text = f"Probability: {prob * 100:.1f}%"
+        counts_text = f"Counts: {count}"
+        
+        painter.setFont(QFont("Arial", small_font))
+        painter.setPen(QColor("#aaa"))
+        
+        info_x = text_x + int(15 * scale) + big_font
+        # Shift probability slightly up, draw counts slightly down
+        painter.drawText(int(info_x), int(cy - (small_font/4)), prob_text)
+        
+        painter.setPen(QColor("#fff")) 
+        painter.drawText(int(info_x), int(cy + small_font + 2), counts_text)
 
 class MultiQubitPainter(QWidget):
     def __init__(self, parent=None):
@@ -482,90 +512,56 @@ class SinglePhotonTab(QWidget):
         image_path = os.path.join(root_dir, "Fig1.png")
         
         self.overlay = InterferometerOverlay(image_path)
-        layout.addWidget(self.overlay, stretch=5)
+        layout.addWidget(self.overlay)
 
-        ctrl_layout = QHBoxLayout()
-        ctrl_layout.setAlignment(Qt.AlignCenter)
+        # 500ms loop for 2 shots per second
+        self.auto_timer = QTimer()
+        self.auto_timer.setInterval(500)
+        self.auto_timer.timeout.connect(self.fire_photon)
 
-        spin_hbox = QHBoxLayout()
-        self.phase_spin = QDoubleSpinBox()
-        self.phase_spin.setRange(0.0, 2.0)
-        self.phase_spin.setSingleStep(0.05)
-        self.phase_spin.setDecimals(3)
-        self.phase_spin.setSuffix(" π")
-        self.phase_spin.setStyleSheet("font-size: 18px; padding: 5px; background: #353535; color: white;")
-        self.phase_spin.setFixedWidth(140)
-        
-        spin_lbl = QLabel("Angle (\u03B8):")
-        spin_lbl.setStyleSheet("font-size: 16px; color: #ccc;")
-        spin_hbox.addWidget(spin_lbl)
-        spin_hbox.addWidget(self.phase_spin)
-        spin_hbox.setAlignment(Qt.AlignCenter)
-        ctrl_layout.addLayout(spin_hbox)
-
-        self.dial = QDial()
-        self.dial.setRange(0, 2000) 
-        self.dial.setNotchesVisible(True)
-        self.dial.setFixedSize(150, 150)
-        self.dial.setStyleSheet("background-color: #2b2b2b;")
-        ctrl_layout.addWidget(self.dial, alignment=Qt.AlignCenter)
-
-        layout.addLayout(ctrl_layout, stretch=2)
-
-        self.send_btn = QPushButton("Send Photon")
-        self.send_btn.setFixedSize(220, 50)
-        self.send_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #9b59b6; color: white;
-                font-size: 18px; font-weight: bold; border-radius: 8px;
-            }
-            QPushButton:hover { background-color: #8e44ad; }
-            QPushButton:pressed { background-color: #732d91; }
-        """)
-        layout.addWidget(self.send_btn, alignment=Qt.AlignCenter)
-
-        self.dial.valueChanged.connect(self.sync_dial_to_spin)
-        self.phase_spin.valueChanged.connect(self.sync_spin_to_dial)
-        self.send_btn.clicked.connect(self.send_photon)
-
+        # 200ms duration for the light flash so it turns off before the next shot
         self.flash_timer = QTimer()
         self.flash_timer.setSingleShot(True)
         self.flash_timer.timeout.connect(self.reset_lights)
+        
+        self.p0 = 1.0
+        self.p1 = 0.0
+        self.c0 = 0
+        self.c1 = 0
 
-        self.update_probabilities()
-
-    def sync_dial_to_spin(self, val):
-        self.phase_spin.blockSignals(True)
-        self.phase_spin.setValue(val / 1000.0)
-        self.phase_spin.blockSignals(False)
-        self.update_probabilities()
-
-    def sync_spin_to_dial(self, val):
-        self.dial.blockSignals(True)
-        self.dial.setValue(int(val * 1000))
-        self.dial.blockSignals(False)
-        self.update_probabilities()
-
-    def update_probabilities(self):
-        val = self.phase_spin.value()
+    def update_probabilities(self, val):
+        self.reset_experiment()
         theta = val * np.pi
         self.p0 = (np.cos(theta / 2))**2
         self.p1 = (np.sin(theta / 2))**2
+        self.overlay.set_probabilities(self.p0, self.p1)
 
-        self.overlay.prob0_lbl.setText(f"Probability: {self.p0 * 100:.1f}%")
-        self.overlay.prob1_lbl.setText(f"Probability: {self.p1 * 100:.1f}%")
+    def toggle_auto(self, is_playing):
+        if is_playing:
+            self.auto_timer.start()
+        else:
+            self.auto_timer.stop()
+            self.reset_lights()
 
-    def send_photon(self):
+    def reset_experiment(self):
+        self.c0 = 0
+        self.c1 = 0
+        self.overlay.set_counts(self.c0, self.c1)
+        self.reset_lights()
+
+    def fire_photon(self):
         self.reset_lights()
         measured_state = np.random.choice([0, 1], p=[self.p0, self.p1])
         
         if measured_state == 0:
-            self.overlay.light0.turn_on()
+            self.c0 += 1
+            self.overlay.trigger_flash(0)
         else:
-            self.overlay.light1.turn_on()
+            self.c1 += 1
+            self.overlay.trigger_flash(1)
             
-        self.flash_timer.start(400)
+        self.overlay.set_counts(self.c0, self.c1)
+        self.flash_timer.start(200)
 
     def reset_lights(self):
-        self.overlay.light0.turn_off()
-        self.overlay.light1.turn_off()
+        self.overlay.reset_flashes()

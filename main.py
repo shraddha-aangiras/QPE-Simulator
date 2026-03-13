@@ -1,12 +1,12 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QTabWidget, QScrollArea, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QTabWidget, QScrollArea, QLabel, QStackedWidget
 from PyQt5 import QtCore
 from PyQt5.QtCore import QTimer
 import numpy as np
 
 from app.style import get_dark_palette
 from app.calc import get_ideal_probs, get_circular_stats
-from app.controls import QPEControlPanel
+from app.controls import QPEControlPanel, InterferometerControlPanel
 from app.views import CountsViewTab, MultiQubitPainter
 from app.views import CountsViewTab, MultiQubitPainter, SinglePhotonTab
 
@@ -27,11 +27,14 @@ class QPE_LabInterface(QMainWindow):
         main_layout.setContentsMargins(0,0,0,0)
         main_layout.setSpacing(0)
         
-        # Left Panel (Controls)
+        # Create both control panels
+        self.interf_controls = InterferometerControlPanel()
         self.controls = QPEControlPanel()
+        
+        # Add them both directly to the main layout
+        main_layout.addWidget(self.interf_controls)
         main_layout.addWidget(self.controls)
         
-        # Right Tabs (Views)
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet("""
             QTabWidget::pane { border: 1px solid #444; top: -1px; }
@@ -39,11 +42,14 @@ class QPE_LabInterface(QMainWindow):
             QTabBar::tab:selected { background: #2b2b2b; color: white; border-top: 2px solid #3498db; }
         """)
 
-        # Connecting tab
         self.tab_connector = SinglePhotonTab()
         self.tabs.addTab(self.tab_connector, "Single shot interferometer")
+        
+        self.interf_controls.phase_spin.valueChanged.connect(self.tab_connector.update_probabilities)
+        self.interf_controls.play_btn.toggled.connect(self.tab_connector.toggle_auto)
+        self.interf_controls.reset_btn.clicked.connect(self.tab_connector.reset_experiment)
+        self.tab_connector.update_probabilities(self.interf_controls.phase_spin.value())
 
-        # Counts View Tab
         self.tab_counts = CountsViewTab()
         self.tabs.addTab(self.tab_counts, "Counts View")
         
@@ -170,8 +176,11 @@ class QPE_LabInterface(QMainWindow):
             self.timer.stop()
     def disconnect_refresh_tab(self, index):
         if index == 0:
-            self.controls.refresh_btn.setEnabled(False)
+            self.controls.hide()
+            self.interf_controls.show()
         else:
+            self.interf_controls.hide()
+            self.controls.show()
             self.controls.refresh_btn.setEnabled(True)
 
     # def update_all(self):
