@@ -4,18 +4,19 @@ import pyqtgraph as pg
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, 
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, 
-    QFrame, QLabel, QDial, QDoubleSpinBox, QPushButton, QSizePolicy
+    QFrame, QLabel, QDial, QDoubleSpinBox, QPushButton, QSizePolicy, QGraphicsDropShadowEffect
 )
 from PyQt5.QtCore import Qt, QPointF, QTimer
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush, QPolygonF, QPixmap
 from PyQt5.QtSvg import QSvgWidget  
-from app.calc import get_theoretical_curve
+from app.calc import get_theoretical_curve, qpe_p
 from app.style import UI_CONFIG, USE_RADIANS
 
 class ResponsiveImageOverlay(QWidget):
-    def __init__(self, image_path, max_w_pct=0.55, max_h_pct=0.55):
+    def __init__(self, image_path, max_w_pct=0.55, max_h_pct=0.55, v_offset=0):
         super().__init__()
         self.pixmap = QPixmap(image_path)
+        self.v_offset = v_offset
         self.setMinimumSize(300, 200)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -41,8 +42,8 @@ class ResponsiveImageOverlay(QWidget):
             target_size.setHeight(int(max_h))
 
         scaled_pix = self.pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        img_x = (self.width() - scaled_pix.width()) // 2
-        img_y = (self.height() - scaled_pix.height()) // 2
+        img_x = (self.width() - scaled_pix.width()) // 2 + self.v_offset
+        img_y = (self.height() - scaled_pix.height()) // 2 + self.v_offset
         painter.drawPixmap(img_x, img_y, scaled_pix)
         self.draw_custom_overlays(painter, img_x, img_y, scaled_pix)
 
@@ -65,8 +66,8 @@ class InterferometerOverlay(ResponsiveImageOverlay):
         self.det0_x_pct = 0.93
         self.det0_y_pct = 0.10
 
-        self.det1_x_pct = 0.95
-        self.det1_y_pct = 0.6
+        self.det1_x_pct = 1.055
+        self.det1_y_pct = 0.4
 
     def set_probabilities(self, p0, p1):
         self.p0 = p0
@@ -524,20 +525,47 @@ class SinglePhotonTab(QWidget):
         image_path_2 = os.path.join(root_dir, "Fig2.png")
         image_path_if = os.path.join(root_dir, "Interferometer.png")
         
-        self.overlay = InterferometerOverlay(image_path_if, max_w_pct=0.5, max_h_pct=0.5)
+        self.overlay = InterferometerOverlay(image_path_if, max_w_pct=0.4, max_h_pct=0.4)
         layout.addWidget(self.overlay, stretch=3) 
 
-        layout.addSpacing(20)
+        #layout.addSpacing(10)
 
-        self.diagram_overlay = ResponsiveImageOverlay(image_path_1, max_w_pct=0.30, max_h_pct=0.30)
-        layout.addWidget(self.diagram_overlay, stretch=2)
+        # 1 qubit diagram
+        # self.diagram_overlay = ResponsiveImageOverlay(image_path_1, max_w_pct=0.40, max_h_pct=0.30)
+        # layout.addWidget(self.diagram_overlay, stretch=2)
 
-        layout.addSpacing(20)
+        #layout.addSpacing(20)
 
-        self.diagram_overlay = ResponsiveImageOverlay(image_path_2, max_w_pct=0.30, max_h_pct=0.30)
-        layout.addWidget(self.diagram_overlay, stretch=2)
+        row_layout = QHBoxLayout()
+        row_layout.setSpacing(0)
+        row_layout.addStretch(1)
+        
+        self.diagram_overlay = ResponsiveImageOverlay(image_path_1, max_w_pct=0.60, max_h_pct=0.60)
+        row_layout.addWidget(self.diagram_overlay, stretch=2) 
+        self.prediction_widget = QubitPredictionWidget(num_qubits=1)
+        self.prediction_widget.setContentsMargins(-250, 0, 0, 0) 
+        row_layout.addWidget(self.prediction_widget, stretch=1)
+        
+        row_layout.addStretch(1)
+        layout.addLayout(row_layout, stretch = 2)
 
-        # --- Auto-fire logic ---
+        # 2 qubit diagram
+
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(0) 
+        row2_layout.addStretch(1)
+        
+        self.circuit_diagram_overlay = ResponsiveImageOverlay(image_path_2, max_w_pct=0.25, max_h_pct=0.25, v_offset=18)
+        row2_layout.addWidget(self.circuit_diagram_overlay, stretch=2)
+        
+        self.multi_prediction_widget = QubitPredictionWidget(num_qubits=2)        
+        self.multi_prediction_widget.setContentsMargins(-200, 20, 0, 0)
+        row2_layout.addWidget(self.multi_prediction_widget, stretch=1)
+
+        row2_layout.addStretch(1) 
+        layout.addLayout(row2_layout, stretch = 2)
+
+        # Timers
         self.auto_timer = QTimer()
         self.auto_timer.setInterval(500)
         self.auto_timer.timeout.connect(self.fire_photon)
@@ -545,24 +573,34 @@ class SinglePhotonTab(QWidget):
         self.flash_timer = QTimer()
         self.flash_timer.setSingleShot(True)
         self.flash_timer.timeout.connect(self.reset_lights)
+
+        self.multi_timer = QTimer()
+        self.multi_timer.setInterval(1500)
+        self.multi_timer.timeout.connect(self.fire_multi_photon)
         
         self.p0 = 1.0
         self.p1 = 0.0
         self.c0 = 0
         self.c1 = 0
+        self.current_phase_val = 0.0
 
     def update_probabilities(self, val):
         self.reset_experiment()
         theta = val * np.pi
+        self.current_phase_val = val / 2 #here change?
         self.p0 = (np.cos(theta / 2))**2
         self.p1 = (np.sin(theta / 2))**2
         self.overlay.set_probabilities(self.p0, self.p1)
 
     def toggle_auto(self, is_playing):
         if is_playing:
+            self.fire_photon()
+            self.fire_multi_photon()
             self.auto_timer.start()
+            self.multi_timer.start() 
         else:
             self.auto_timer.stop()
+            self.multi_timer.stop()
             self.reset_lights()
 
     def reset_experiment(self):
@@ -570,6 +608,12 @@ class SinglePhotonTab(QWidget):
         self.c1 = 0
         self.overlay.set_counts(self.c0, self.c1)
         self.reset_lights()
+
+        if hasattr(self, 'prediction_widget'):
+            self.prediction_widget.reset()
+
+        if hasattr(self, 'multi_prediction_widget'):
+            self.multi_prediction_widget.reset()
 
     def fire_photon(self):
         self.reset_lights()
@@ -583,7 +627,203 @@ class SinglePhotonTab(QWidget):
             self.overlay.trigger_flash(1)
             
         self.overlay.set_counts(self.c0, self.c1)
+        self.prediction_widget.update_prediction(measured_state, self.current_phase_val)
         self.flash_timer.start(200)
+
+    def fire_multi_photon(self):
+        a, b, c, d = qpe_p(2, 0, self.current_phase_val), qpe_p(2, 1, self.current_phase_val), qpe_p(2, 2, self.current_phase_val), qpe_p(2, 3, self.current_phase_val)
+        measured_state = np.random.choice([0, 1, 2, 3], p=[a, b, c, d])
+        
+        self.multi_prediction_widget.update_prediction(measured_state, self.current_phase_val)
 
     def reset_lights(self):
         self.overlay.reset_flashes()
+
+
+class QubitPredictionWidget(QFrame):
+    def __init__(self, num_qubits=1):
+        super().__init__()
+        self.num_qubits = num_qubits
+        
+        self.setFixedWidth(650) 
+        
+        main_layout = QHBoxLayout(self) 
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        squares_layout = QVBoxLayout()
+        squares_layout.setAlignment(Qt.AlignVCenter)
+        squares_layout.setSpacing(10)
+        self.default_style = "border: 2px solid #555; border-radius: 8px; background-color: #353535; color: white; font-size: 28px; font-weight: bold;"
+        
+        self.squares = []
+        self.glows = []
+
+        # Generate the squares and glows dynamically
+        for _ in range(num_qubits):
+            sq = QLabel("-")
+            sq.setFixedSize(60, 60)
+            sq.setAlignment(Qt.AlignCenter)
+            sq.setStyleSheet(self.default_style)
+            
+            glow = QGraphicsDropShadowEffect()
+            glow.setBlurRadius(40)
+            glow.setOffset(0, 0)
+            glow.setColor(Qt.white)
+            glow.setEnabled(False)
+            sq.setGraphicsEffect(glow)
+            
+            squares_layout.addWidget(sq)
+            self.squares.append(sq)
+            self.glows.append(glow)
+
+
+        # Text readouts
+        stacker = QVBoxLayout()
+        stacker.setAlignment(Qt.AlignVCenter)
+        stacker.setSpacing(5)
+        self.lbl_predicted = QLabel("Shot Phase: --")
+        self.lbl_predicted.setStyleSheet("font-size: 14px; color: #fff; margin-top: 10px;")
+        
+        # self.lbl_error = QLabel("Error: --")
+        # self.lbl_error.setStyleSheet("font-size: 14px; color: #ccc;")
+
+        stacker.addWidget(self.lbl_predicted)
+        # stacker.addWidget(self.lbl_error)
+
+        # For counts
+        counts_layout = QVBoxLayout()
+        counts_layout.setAlignment(Qt.AlignVCenter)
+        counts_layout.setSpacing(10)
+        
+        self.count_labels = []
+        num_states = 2 ** num_qubits
+        for i in range(num_states):
+            state_str = format(i, f'0{num_qubits}b')
+            state_phase = i * (1.0 / (2 ** num_qubits)) * 2 # Fixed math logic here
+            lbl = QLabel(f"{state_phase}π ({state_str}): 0")
+            lbl.setStyleSheet("font-size: 14px; color: #ccc;")
+            counts_layout.addWidget(lbl)
+            self.count_labels.append(lbl)
+            
+        self.state_counts = {i: 0 for i in range(num_states)}
+        
+        cumul_layout = QVBoxLayout()
+        cumul_layout.setAlignment(Qt.AlignVCenter)
+        cumul_layout.setSpacing(5)
+        
+        self.lbl_cumul_phase = QLabel("Cumulative Phase: --")
+        self.lbl_cumul_phase.setStyleSheet("font-size: 14px; color: #fff;")
+        
+        self.lbl_cumul_error = QLabel("Error: --")
+        self.lbl_cumul_error.setStyleSheet("font-size: 14px; color: #ccc;")
+        
+        cumul_layout.addWidget(self.lbl_cumul_phase)
+        cumul_layout.addWidget(self.lbl_cumul_error)
+        
+        self.total_phase_sum = 0.0
+        self.total_shots = 0
+        
+        main_layout.addLayout(squares_layout)
+        main_layout.addLayout(stacker)
+        main_layout.addSpacing(25)
+        main_layout.addLayout(counts_layout)
+        main_layout.addSpacing(25)
+        main_layout.addLayout(cumul_layout)
+
+        self.glow_timer = QTimer()
+        self.glow_timer.setSingleShot(True)
+        self.glow_timer.timeout.connect(self.remove_glow)
+
+    def update_prediction(self, state_val, true_phase_pi):
+        # Update each square using bitwise math
+        for i in range(self.num_qubits):
+            bit = (state_val >> (self.num_qubits - 1 - i)) & 1
+            sq = self.squares[i]
+            glow = self.glows[i]
+            
+            sq.setText(str(bit))
+            
+            if bit == 0:
+                sq.setStyleSheet("border: 2px solid #3498db; border-radius: 8px; background-color: #2980b9; color: white; font-size: 28px; font-weight: bold;")
+            else:
+                sq.setStyleSheet("border: 2px solid #e74c3c; border-radius: 8px; background-color: #c0392b; color: white; font-size: 28px; font-weight: bold;")
+            
+            glow.setEnabled(True)
+
+        # Standard QPE phase mapping
+        # if self.num_qubits == 1:
+        #     predicted_val = float(state_val) # 0.0 or 1.0
+        #     pred_str = "0π" if state_val == 0 else "π"
+        # else:
+        #     multiplier = 1.0 / (2 ** self.num_qubits)
+        #     predicted_val = state_val * multiplier * 2 # e.g., 0.25, 0.50, 0.75
+        #     pred_str = f"{predicted_val:.2f} π"
+
+        multiplier = 1.0 / (2 ** self.num_qubits)
+        predicted_val = state_val * multiplier * 2 # e.g., 0.25, 0.50, 0.75
+        pred_str = f"{predicted_val:.2f} π"
+            
+        self.lbl_predicted.setText(f"Shot Phase: {pred_str}")
+        
+        # Calculate circular phase error 
+        # error_val = abs(predicted_val - (true_phase_pi * 2))
+        # if error_val > 1.0:
+        #     error_val = 2.0 - error_val
+            
+        # self.lbl_error.setText(f"Error: {error_val:.3f} π")
+        
+        # if error_val == 0.0:
+        #     self.lbl_error.setStyleSheet("font-size: 14px; color: #2ecc71; font-weight: bold;") 
+        # else:
+        #     self.lbl_error.setStyleSheet("font-size: 14px; color: #e74c3c; font-weight: bold;")
+            
+        self.state_counts[state_val] += 1
+        state_str = format(state_val, f'0{self.num_qubits}b')
+        self.count_labels[state_val].setText(f"{predicted_val}π ({state_str}): {self.state_counts[state_val]}")
+        
+        self.total_shots += 1
+        self.total_phase_sum += predicted_val
+        cumul_phase = self.total_phase_sum / self.total_shots
+        
+        self.lbl_cumul_phase.setText(f"Cumulative Phase: {cumul_phase:.3f} π")
+        
+        cumul_error_val = abs(cumul_phase - (true_phase_pi * 2))
+        if cumul_error_val > 1.0:
+            cumul_error_val = 2.0 - cumul_error_val
+            
+        self.lbl_cumul_error.setText(f"Error: {cumul_error_val:.3f} π")
+        
+        if cumul_error_val == 0.0:
+            self.lbl_cumul_error.setStyleSheet("font-size: 14px; color: #2ecc71; font-weight: bold;") 
+        else:
+            self.lbl_cumul_error.setStyleSheet("font-size: 14px; color: #e74c3c; font-weight: bold;")
+            
+        self.glow_timer.start(300)
+
+    def remove_glow(self):
+        for glow in self.glows:
+            glow.setEnabled(False)
+
+    def reset(self):
+        # Cleanly resets all squares and text to default
+        for sq in self.squares:
+            sq.setText("-")
+            sq.setStyleSheet(self.default_style)
+        self.lbl_predicted.setText("Shot Phase: --")
+        # self.lbl_error.setText("Error: --")
+        # self.lbl_error.setStyleSheet("font-size: 14px; color: #ccc;")
+        
+        # Reset running counts
+        num_states = 2 ** self.num_qubits
+        self.state_counts = {i: 0 for i in range(num_states)}
+        for i in range(num_states):
+            state_str = format(i, f'0{self.num_qubits}b')
+            state_phase = i * (1.0 / (2 ** self.num_qubits)) * 2
+            self.count_labels[i].setText(f"{state_phase}π ({state_str}): 0")
+            
+        self.total_phase_sum = 0.0
+        self.total_shots = 0
+        self.lbl_cumul_phase.setText("Cumulative Phase: --")
+        self.lbl_cumul_error.setText("Error: --")
+        self.lbl_cumul_error.setStyleSheet("font-size: 14px; color: #ccc;")
