@@ -12,52 +12,15 @@ from PyQt5.QtSvg import QSvgWidget
 from app.calc import get_theoretical_curve
 from app.style import UI_CONFIG, USE_RADIANS
 
-
-class InterferometerOverlay(QWidget):
-    def __init__(self, image_path):
+class ResponsiveImageOverlay(QWidget):
+    def __init__(self, image_path, max_w_pct=0.55, max_h_pct=0.55):
         super().__init__()
         self.pixmap = QPixmap(image_path)
-        self.setMinimumSize(500, 350)
+        self.setMinimumSize(300, 200)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        self.max_screen_w_pct = 0.55
-        self.max_screen_h_pct = 0.55
-
-        self.p0 = 1.0
-        self.p1 = 0.0
-        self.count0 = 0
-        self.count1 = 0
-        
-        self.flash0 = False
-        self.flash1 = False
-
-        self.det0_x_pct = 0.75
-        self.det0_y_pct = 0.1
-
-        self.det1_x_pct = 0.85
-        self.det1_y_pct = 0.28
-
-    def set_probabilities(self, p0, p1):
-        self.p0 = p0
-        self.p1 = p1
-        self.update() 
-
-    def set_counts(self, c0, c1):
-        self.count0 = c0
-        self.count1 = c1
-        self.update()
-
-    def trigger_flash(self, det_idx):
-        if det_idx == 0:
-            self.flash0 = True
-        else:
-            self.flash1 = True
-        self.update()
-
-    def reset_flashes(self):
-        self.flash0 = False
-        self.flash1 = False
-        self.update()
+        self.max_screen_w_pct = max_w_pct
+        self.max_screen_h_pct = max_h_pct
 
     def paintEvent(self, event):
         if self.pixmap.isNull(): return
@@ -81,7 +44,53 @@ class InterferometerOverlay(QWidget):
         img_x = (self.width() - scaled_pix.width()) // 2
         img_y = (self.height() - scaled_pix.height()) // 2
         painter.drawPixmap(img_x, img_y, scaled_pix)
+        self.draw_custom_overlays(painter, img_x, img_y, scaled_pix)
 
+    def draw_custom_overlays(self, painter, img_x, img_y, scaled_pix):
+        pass
+
+
+class InterferometerOverlay(ResponsiveImageOverlay):
+    def __init__(self, image_path, max_w_pct=0.55, max_h_pct=0.55):
+        super().__init__(image_path, max_w_pct, max_h_pct)
+        
+        self.p0 = 1.0
+        self.p1 = 0.0
+        self.count0 = 0
+        self.count1 = 0
+        
+        self.flash0 = False
+        self.flash1 = False
+
+        self.det0_x_pct = 0.93
+        self.det0_y_pct = 0.10
+
+        self.det1_x_pct = 0.95
+        self.det1_y_pct = 0.6
+
+    def set_probabilities(self, p0, p1):
+        self.p0 = p0
+        self.p1 = p1
+        self.update() 
+
+    def set_counts(self, c0, c1):
+        self.count0 = c0
+        self.count1 = c1
+        self.update()
+
+    def trigger_flash(self, det_idx):
+        if det_idx == 0:
+            self.flash0 = True
+        else:
+            self.flash1 = True
+        self.update()
+
+    def reset_flashes(self):
+        self.flash0 = False
+        self.flash1 = False
+        self.update()
+
+    def draw_custom_overlays(self, painter, img_x, img_y, scaled_pix):
         scale = min(scaled_pix.height() / 400.0, 1.3)
 
         d0_cx = img_x + (scaled_pix.width() * self.det0_x_pct)
@@ -118,7 +127,6 @@ class InterferometerOverlay(QWidget):
         painter.setPen(QColor("#aaa"))
         
         info_x = text_x + int(15 * scale) + big_font
-        # Shift probability slightly up, draw counts slightly down
         painter.drawText(int(info_x), int(cy - (small_font/4)), prob_text)
         
         painter.setPen(QColor("#fff")) 
@@ -507,19 +515,33 @@ class SinglePhotonTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
 
+        import os
         current_dir = os.path.dirname(os.path.abspath(__file__))
         root_dir = os.path.dirname(current_dir)
-        image_path = os.path.join(root_dir, "Fig1.png")
         
-        self.overlay = InterferometerOverlay(image_path)
-        layout.addWidget(self.overlay)
+        #image_path_1 = os.path.join(root_dir, "Fig1.png")
+        image_path_1 = os.path.join(root_dir, "Circuit1.png")
+        image_path_2 = os.path.join(root_dir, "Fig2.png")
+        image_path_if = os.path.join(root_dir, "Interferometer.png")
+        
+        self.overlay = InterferometerOverlay(image_path_if, max_w_pct=0.5, max_h_pct=0.5)
+        layout.addWidget(self.overlay, stretch=3) 
 
-        # 500ms loop for 2 shots per second
+        layout.addSpacing(20)
+
+        self.diagram_overlay = ResponsiveImageOverlay(image_path_1, max_w_pct=0.30, max_h_pct=0.30)
+        layout.addWidget(self.diagram_overlay, stretch=2)
+
+        layout.addSpacing(20)
+
+        self.diagram_overlay = ResponsiveImageOverlay(image_path_2, max_w_pct=0.30, max_h_pct=0.30)
+        layout.addWidget(self.diagram_overlay, stretch=2)
+
+        # --- Auto-fire logic ---
         self.auto_timer = QTimer()
         self.auto_timer.setInterval(500)
         self.auto_timer.timeout.connect(self.fire_photon)
 
-        # 200ms duration for the light flash so it turns off before the next shot
         self.flash_timer = QTimer()
         self.flash_timer.setSingleShot(True)
         self.flash_timer.timeout.connect(self.reset_lights)
