@@ -3,7 +3,6 @@ from app.style import USE_RADIANS
 
 def qpe_p(n, x, phase):
     """Calculates ideal probability of measuring state |x> given n qubits and phase."""
-    # (No changes to this function)
     if abs(phase - x/(2**n)) < 1e-9: return 1.0
     num = np.sin(np.pi * (2**n * phase - x)) ** 2
     denom = np.sin(np.pi * (phase - x/(2**n))) ** 2
@@ -110,7 +109,7 @@ def get_ideal_probs(n_qubits, phase_val):
         
     return prob_arr
 
-def get_theoretical_curve(n, phase_val, shots, points=400):
+def get_theoretical_curve(n, phase_val, shots, points=800):
     """
     Generates x and y arrays for the theoretical probability curve.
     x is scaled to [0, N], y is scaled to total counts.

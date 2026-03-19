@@ -350,6 +350,8 @@ class CountsViewTab(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 5, 0, 0)
+
+        self.dynamic_x_axis = False
         
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(1)
@@ -462,29 +464,38 @@ class CountsViewTab(QWidget):
         x_smooth, y_smooth = get_theoretical_curve(n_qubits, true_phase, total_shots)
         self.theory_curve.setData(x_smooth, y_smooth)
         
-        if len(nonzero_indices) > 0:
+        x_smooth, y_smooth = get_theoretical_curve(n_qubits, true_phase, total_shots)
+        self.theory_curve.setData(x_smooth, y_smooth)
+        
+        if self.dynamic_x_axis and len(nonzero_indices) > 0:
             first_state = np.min(nonzero_indices)
             last_state  = np.max(nonzero_indices)
             buffer = 3
             min_x = max(0, first_state - buffer)
             max_x = min(N - 1, last_state + buffer)
-            self.graph_widget.setXRange(min_x, max_x, padding=0)
-            
-            ax = self.graph_widget.getAxis('bottom')
-            ticks = []
-            step = 1
-            if (max_x - min_x) > 20: step = int((max_x - min_x) / 10)
-            for x in range(int(min_x), int(max_x) + 1, step):
-                if 0 <= x < len(counts):
-                      phase_val = x / (2**n_qubits)
-                      if USE_RADIANS:
-                          label = f"{(phase_val * 2):.2f}π"
-                      else:
-                          label = f"{phase_val:.3f}"
-                      ticks.append((x, label))
-            ax.setTicks([ticks])
         else:
-            self.graph_widget.setXRange(0, N)
+            min_x = 0
+            max_x = N
+            
+        self.graph_widget.setXRange(min_x - 0.5, max_x + 0.5, padding=0)
+        
+        ax = self.graph_widget.getAxis('bottom')
+        ticks = []
+        step = 1
+
+        if (max_x - min_x) > 20: 
+            step = int((max_x - min_x) / 10)
+            
+        for x in range(int(min_x), int(max_x) + 1, step):
+            if 0 <= x <= N:
+                phase_val = x / (2**n_qubits)
+                if USE_RADIANS:
+                    label = f"{(phase_val * 2):.2f}π"
+                else:
+                    label = f"{phase_val:.3f}"
+                ticks.append((x, label))
+                
+        ax.setTicks([ticks])
 
         est = data['phase_est']
         diff = abs(est - true_phase)
