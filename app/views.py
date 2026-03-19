@@ -6,11 +6,29 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, 
     QFrame, QLabel, QDial, QDoubleSpinBox, QPushButton, QSizePolicy, QGraphicsDropShadowEffect
 )
-from PyQt5.QtCore import Qt, QPointF, QTimer
+from PyQt5.QtCore import Qt, QPointF, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush, QPolygonF, QPixmap
 from PyQt5.QtSvg import QSvgWidget  
 from app.calc import get_theoretical_curve, qpe_p
 from app.style import UI_CONFIG, USE_RADIANS
+
+class SimulationThread(QThread):
+    tick_signal = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.is_running = False
+
+    def run(self):
+        self.is_running = True
+        while self.is_running:
+            self.msleep(500)
+            if self.is_running:
+                self.tick_signal.emit()
+
+    def stop(self):
+        self.is_running = False
+        self.wait()
 
 class ResponsiveImageOverlay(QWidget):
     def __init__(self, image_path, max_w_pct=0.55, max_h_pct=0.55, v_offset=0):
@@ -346,6 +364,18 @@ class CountsViewTab(QWidget):
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.setStyleSheet("QTableWidget { border: none; }")
+        self.table.setStyleSheet(f"""
+            QTableWidget {{ 
+                border: none; 
+                background-color: {UI_CONFIG['PLOT_BACKGROUND']}; 
+                gridline-color: #444444;
+            }}
+            QHeaderView::section {{
+                background-color: #353535;
+                color: white;
+                border: 1px solid #444444;
+            }}
+        """)
         splitter.addWidget(self.table)
         
         self.graph_widget = pg.PlotWidget()
@@ -566,17 +596,12 @@ class SinglePhotonTab(QWidget):
         layout.addLayout(row2_layout, stretch = 2)
 
         # Timers
-        self.auto_timer = QTimer()
-        self.auto_timer.setInterval(500)
-        self.auto_timer.timeout.connect(self.fire_photon)
+        self.sim_thread = SimulationThread(self)
+        self.sim_thread.tick_signal.connect(self.fire_both)
 
         self.flash_timer = QTimer()
         self.flash_timer.setSingleShot(True)
         self.flash_timer.timeout.connect(self.reset_lights)
-
-        self.multi_timer = QTimer()
-        self.multi_timer.setInterval(1500)
-        self.multi_timer.timeout.connect(self.fire_multi_photon)
         
         self.p0 = 1.0
         self.p1 = 0.0
@@ -594,14 +619,15 @@ class SinglePhotonTab(QWidget):
 
     def toggle_auto(self, is_playing):
         if is_playing:
-            self.fire_photon()
-            self.fire_multi_photon()
-            self.auto_timer.start()
-            self.multi_timer.start() 
+            self.fire_both()
+            self.sim_thread.start()
         else:
-            self.auto_timer.stop()
-            self.multi_timer.stop()
+            self.sim_thread.stop()
             self.reset_lights()
+
+    def fire_both(self):
+        self.fire_photon()
+        self.fire_multi_photon()
 
     def reset_experiment(self):
         self.c0 = 0
@@ -789,8 +815,9 @@ class QubitPredictionWidget(QFrame):
         self.lbl_cumul_phase.setText(f"Cumulative Phase: {cumul_phase:.3f} π")
         
         cumul_error_val = abs(cumul_phase - (true_phase_pi * 2))
-        if cumul_error_val > 1.0:
-            cumul_error_val = 2.0 - cumul_error_val
+        # if cumul_error_val > 1.0:
+        #     cumul_error_val = 2.0 - cumul_error_val
+        cumul_error_val = min(cumul_error_val, 2.0 - cumul_error_val)
             
         self.lbl_cumul_error.setText(f"Error: {cumul_error_val:.3f} π")
         

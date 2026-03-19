@@ -2,6 +2,8 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QTabWidget, QScrollArea, QLabel, QStackedWidget
 from PyQt5 import QtCore
 from PyQt5.QtCore import QTimer
+from PyQt5.QtGui import QFont
+from app.style import get_dark_palette
 import numpy as np
 
 from app.style import get_dark_palette
@@ -205,6 +207,8 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    app.setFont(QFont("Segoe UI", 15))
+    app.setPalette(get_dark_palette())
     
     window = QPE_LabInterface()
     window.show()
