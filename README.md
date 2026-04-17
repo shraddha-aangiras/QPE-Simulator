@@ -33,5 +33,4 @@ python main.py
 | File | Description |
 |------|-------------|
 | `main.py` | Entry point |
-| `app/interface.py` | PyQt5 GUI: control panel, counts tab, scaling tab |
 | `requirements.txt` | Python dependencies (PyQt5, pyqtgraph, numpy) |
